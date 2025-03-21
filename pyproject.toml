@@ -1,0 +1,67 @@
+[project]
+name = "pyinkr"
+version = "0.1.0"
+description = "A tool for managing MKV files"
+authors = [{ name = "xMohnad" }]
+
+dependencies = [
+  "pymkv2>=2.1.1",
+  "textual>=2.1.2",
+  "textual_fspicker>=0.4.1"
+]
+
+readme = "README.md"
+license-files = ["LICENSE"]
+license = "MIT"
+requires-python = ">=3.9"
+
+classifiers = [
+    "Environment :: Console",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Terminals",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+
+keywords = [
+    "terminal",
+]
+
+[project.urls]
+Repository = "https://github.com/xMohnad/Inkr"
+Source = "https://github.com/xMohnad/Inkr"
+Issues = "https://github.com/xMohnad/Inkr/issues"
+Discussions = "https://github.com/xMohnad/Inkr/discussions"
+
+[tool.rye]
+managed = true
+# dev-dependencies = [
+#     "pre-commit>=4.0.1",
+#     "mypy>=1.14.1",
+#     "mkdocstrings[python]>=0.28.2",
+#     "mkdocs-material>=9.6.5",
+#     "ruff>=0.9.8",
+# ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/inkr"]
+
+[project.scripts]
+inkr = "inkr.main:main"

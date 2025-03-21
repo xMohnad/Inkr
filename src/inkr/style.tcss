@@ -1,0 +1,13 @@
+Screen {
+    align: center middle;
+}
+
+ListTrack { 
+    ListItem {
+        height: auto;
+        Checkbox {
+            width: 100%;
+            height: auto;
+        }
+    }
+}
