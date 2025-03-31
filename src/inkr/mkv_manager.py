@@ -18,7 +18,7 @@ class MkvManager:
             raise FileNotFoundError(f"The file {filepath} does not exist.")
 
         self.mkv: MKVFile = MKVFile(filepath)
-        self.tracks: List[Track] = Track.from_mkvtrack(self.mkv.tracks)
+        self.tracks: List[Track] = Track.from_mkvtracks(self.mkv.tracks)
 
     def save(self, save_path: Path) -> None:
         """
@@ -39,7 +39,7 @@ class MkvManager:
         """Add a new track to the MKV file."""
         track = MKVTrack(file_path=track_path)
         self.mkv.add_track(track)
-        track = Track.from_mkvtrack([track])[0]
+        track = Track.from_mkvtracks([track])[0]
         self.tracks.append(track)
         self.rearrange_tracks()
         return track
