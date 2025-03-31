@@ -68,7 +68,7 @@ class ListTrack(ListView):
     app: Inkr
 
     BINDINGS = [
-        Binding("a", "add_track", "Add Track"),
+        Binding("a", "add_track", "Add"),
         Binding("space", "select", "Select", show=False),
         Binding("o", "open_video", "Open Video", show=False),
         Binding("alt+up", "move_up", "Move Up", show=False),
@@ -101,17 +101,16 @@ class ListTrack(ListView):
     def on_changed(self, event: CheckboxMeta.Changed) -> None:
         """Handle checkbox state changes."""
         event.checkbox.metadata.toggle()
-        # self.notify(f"Track {self.index} enabled: {track.enabled} - {track.name}")
 
     def action_select(self):
         """Toggle selection state of the current track."""
         if self.index is not None:
-            cast(CheckboxMeta, self.children[self.index].children[0]).toggle()
+            self.get_checkbox.toggle()
 
     async def action_move_up(self):
         """Move the selected track up."""
         if self.index is not None and self.index > 0:
-            track = cast(CheckboxMeta, self.children[self.index].children[0]).metadata
+            track = self.get_checkbox.metadata
             self.app.mkv_manager.move_track_backward(self.index)
             self.pop(self.index)
             await self.insert(self.index - 1, [track.list_item()])
@@ -120,8 +119,12 @@ class ListTrack(ListView):
     async def action_move_down(self):
         """Move the selected track down."""
         if self.index is not None and self.index < len(self.tracks) - 1:
-            track = cast(CheckboxMeta, self.children[self.index].children[0]).metadata
+            track = self.get_checkbox.metadata
             self.app.mkv_manager.move_track_forward(self.index)
             self.pop(self.index)
             await self.insert(self.index + 2, [track.list_item()])
             self.index += 1
+
+    @property
+    def get_checkbox(self):
+        return cast(CheckboxMeta, self.children[self.index].children[0])
