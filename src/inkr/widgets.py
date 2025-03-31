@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
     from inkr.main import Inkr
 
+from inkr.screen import EditScreen
 
 MetadataType = TypeVar("MetadataType")
 
@@ -69,6 +70,8 @@ class ListTrack(ListView):
 
     BINDINGS = [
         Binding("a", "add_track", "Add"),
+        Binding("n", "edit_name", "Name"),
+        Binding("l", "edit_lang", "Lang"),
         Binding("d", "toggle_default", "Toggle Default"),
         Binding("space", "select", "Select", show=False),
         Binding("o", "open_video", "Open Video", show=False),
@@ -109,6 +112,16 @@ class ListTrack(ListView):
             track.toggle_default()
             checkbox.label = track.formatted_text()
 
+    async def action_edit_name(self):
+        """Edit the name of the selected track."""
+        self.edit_track_attribute("name", "Edit Name", "Enter name...", "name_editor")
+
+    async def action_edit_lang(self):
+        """Edit the language of the selected MKV track."""
+        self.edit_track_attribute(
+            "language", "Edit Language", "Enter Language...", "language_editor"
+        )
+
     @on(CheckboxMeta.Changed)
     def on_changed(self, event: CheckboxMeta.Changed) -> None:
         """Handle checkbox state changes."""
@@ -136,6 +149,46 @@ class ListTrack(ListView):
             self.pop(self.index)
             await self.insert(self.index + 2, [track.list_item()])
             self.index += 1
+
+    @work(exclusive=True)
+    async def edit_track_attribute(
+        self, attribute: str, title: str, placeholder: str, screen_name: str
+    ) -> None:
+        """Helper function to edit a track attribute."""
+        if not hasattr(self.app, "mkv_manager"):
+            self.notify("Open MKV First", severity="error")
+            return
+
+        if self.index is None:
+            self.notify("No track selected", severity="warning")
+            return
+
+        checkbox = self.get_checkbox
+        track = checkbox.metadata
+
+        new_value = await self.app.push_screen(
+            EditScreen(
+                getattr(track, attribute),
+                title,
+                placeholder,
+                name=screen_name,
+            ),
+            wait_for_dismiss=True,
+        )
+
+        if new_value is None:
+            return
+
+        new_value = new_value.strip()
+        if not new_value:
+            self.notify(f"{attribute.capitalize()} cannot be empty", severity="warning")
+            return
+
+        try:
+            setattr(track, attribute, new_value)
+            checkbox.label = track.formatted_text()
+        except ValueError as e:
+            self.notify(str(e), severity="error")
 
     @property
     def get_checkbox(self):
