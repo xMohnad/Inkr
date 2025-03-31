@@ -92,6 +92,7 @@ class ListTrack(ListView):
 
     @work(exclusive=True)
     async def action_add_track(self):
+        """Add a new track to the MKV file."""
         if not hasattr(self.app, "mkv_manager"):
             return self.notify("Open MKV First")
 
@@ -99,7 +100,27 @@ class ListTrack(ListView):
         if not path:
             return self.notify("Canceled")
 
-        self.append(self.app.mkv_manager.add_track(str(path)).list_item())
+        async def background_work() -> None:
+            """Background task for track processing."""
+            try:
+                # Process file in background
+                track = self.app.mkv_manager.add_track(str(path)).list_item()
+
+                # Update UI from main thread
+                self.app.call_from_thread(self.append, track)
+            except Exception as e:
+                self.notify(f"Error adding track: {str(e)}", severity="error")
+            finally:
+                self.loading = False
+
+        # Start background processing
+        self.loading = True
+        self.run_worker(
+            background_work,
+            thread=True,
+            exclusive=True,
+            name="Add Track Worker",
+        )
 
     async def action_toggle_default(self):
         """Set the selected track as default."""
