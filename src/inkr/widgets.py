@@ -69,6 +69,7 @@ class ListTrack(ListView):
 
     BINDINGS = [
         Binding("a", "add_track", "Add"),
+        Binding("d", "toggle_default", "Toggle Default"),
         Binding("space", "select", "Select", show=False),
         Binding("o", "open_video", "Open Video", show=False),
         Binding("alt+up", "move_up", "Move Up", show=False),
@@ -96,6 +97,17 @@ class ListTrack(ListView):
             return self.notify("Canceled")
 
         self.append(self.app.mkv_manager.add_track(str(path)).list_item())
+
+    async def action_toggle_default(self):
+        """Set the selected track as default."""
+        if not hasattr(self.app, "mkv_manager"):
+            return self.notify("Open MKV First")
+
+        if self.index is not None:
+            checkbox = self.get_checkbox
+            track = checkbox.metadata
+            track.toggle_default()
+            checkbox.label = track.formatted_text()
 
     @on(CheckboxMeta.Changed)
     def on_changed(self, event: CheckboxMeta.Changed) -> None:
