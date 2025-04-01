@@ -2,78 +2,94 @@
 
 Inkr is a simple tool for managing MKV files.
 
-## Features
-
-- **Open MKV Files**: Load MKV files.
-- **Track Management**:
-  - **Add Tracks**: Add new audio, video, or subtitle tracks to the MKV file.
-  - **Toggle Tracks**: Enable or disable tracks for inclusion in the output file.
-  - **Rearrange Tracks**: Move tracks up or down to change their order.
-- **Save Changes**: Save the modified MKV file.
-
 ## Installation
 
 ### Prerequisites
 
-- **MKVToolNix**: Ensure `mkvtoolnix-cli` is installed on your system. You can install it using your package manager:
-  - **Arch Linux**:
+- **MKVToolNix**: Required for MKV operations. Install using your package manager:
 
-    ```bash
-    sudo pacman -S mkvtoolnix-cli
-    ```
-
-  - **Debian/Ubuntu**:
-
-    ```bash
-    sudo apt install mkvtoolnix
-    ```
-
-  - **macOS** (with Homebrew):
-
-    ```bash
-    brew install mkvtoolnix
-    ```
-
-  - **Termux**:
-
-    ```bash
-    pkg install mkvtoolnix
-    ```
-
-  - **Windows**: Download and install from the [official MKVToolNix website](https://mkvtoolnix.download/downloads.html#windows).
+  | Platform | Command |
+  |----------|---------|
+  | **Arch Linux** | `sudo pacman -S mkvtoolnix-cli` |
+  | **Debian/Ubuntu** | `sudo apt install mkvtoolnix` |
+  | **macOS** (Homebrew) | `brew install mkvtoolnix` |
+  | **Termux** | `pkg install mkvtoolnix` |
+  | **Windows** | [Download installer](https://mkvtoolnix.download/downloads.html#windows) |
 
 ### Install Inkr
 
-You can install Inkr directly via `pip`:
+#### Recommended Method (using pipx)
+
+```bash
+pipx install pyinkr
+```
+
+*Why pipx?*
+
+- Isolates the application in its own environment
+- Prevents dependency conflicts
+- Easier to uninstall/update
+
+#### Alternative Method (using pip)
 
 ```bash
 pip install pyinkr
 ```
 
-### For Development
-
-If you want to contribute to the project or run it locally:
+### For Developers
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/xMohnad/Inkr.git
-   cd inkr
+   cd Inkr
    ```
-1. Install the project in editable mode:
+
+1. Set up development environment:
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Linux/macOS
+   # OR
+   .venv\Scripts\activate    # Windows
+   ```
+
+1. Install in editable mode with dev dependencies:
+
    ```bash
    pip install -e .
    ```
 
 ## Key Bindings
 
-| Key | Action |
-|--------------|----------------------------|
-| `o` | Open an MKV file |
-| `a` | Add a new track |
-| `Space` | Toggle track (disables & removes when off) |
-| `Alt+Up` | Move track up |
-| `Alt+Down` | Move track down |
-| `s` | Save the MKV file |
+### App-Level Bindings
+
+| Key | Action | Visible |
+|-----|--------|---------|
+| `o` | Open MKV file | ✓ |
+| `s` | Save MKV file | ✓ |
+
+### Track Management
+
+| Key | Action | Visible |
+|-----|--------|---------|
+| `a` | Add new track | ✓ |
+| `n` | Edit track name | ✓ |
+| `l` | Edit track language | ✓ |
+| `d` | Toggle default track status | ✓ |
+| `Space` | Toggle track selection (disables when off) | ✕ |
+| `Alt+↑` | Move track up | ✕ |
+| `Alt+↓` | Move track down | ✕ |
+
+### Navigation
+
+| Key | Action | Visible |
+|-----|--------|---------|
+| `↑` | Move cursor up | ✕ |
+| `↓` | Move cursor down | ✕ |
+| `Tab` | Focus next element | ✕ |
+| `Shift+Tab` | Focus previous element | ✕ |
+| `Esc` | Close modal/cancel action | ✓ |
 
 ## Dependencies
 
