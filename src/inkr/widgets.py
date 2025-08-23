@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 from textual import on, work
 from textual.binding import Binding
-from textual.widgets import Checkbox, ListView
+from textual.widgets import Checkbox, ListView, Tree
 from textual.widgets._toggle_button import ToggleButton
 from textual_fspicker import FileOpen
 
@@ -88,7 +88,6 @@ class ListTrack(ListView):
                 await self.clear()
                 await self.extend([track.list_item() for track in self.tracks])
             self.index = 0
-            self.focus()
 
     @work(exclusive=True)
     async def action_add_track(self):
@@ -110,11 +109,8 @@ class ListTrack(ListView):
                 self.app.call_from_thread(self.append, track)
             except Exception as e:
                 self.notify(f"Error adding track: {str(e)}", severity="error")
-            finally:
-                self.loading = False
 
         # Start background processing
-        self.loading = True
         self.run_worker(
             background_work,
             thread=True,
@@ -214,3 +210,61 @@ class ListTrack(ListView):
     @property
     def get_checkbox(self):
         return cast(CheckboxMeta, self.children[self.index].children[0])
+
+
+class InfoTree(Tree[None]):
+    """A widget that displays MKV Info."""
+
+    app: Inkr
+
+    BINDINGS = [
+        Binding("t", "edit_title", "Edit Title"),
+        Binding("j", "cursor_down", show=False),
+        Binding("k", "cursor_up", show=False),
+        Binding("h", "scroll_left", show=False),
+        Binding("l", "scroll_right", show=False),
+        Binding("o", "open_video", "Open Video", show=False),
+    ]
+
+    def __init__(self, label: str = "INFO") -> None:
+        super().__init__(label)
+        self._info: dict[str, Any] = {}
+
+    # --- property ---
+    @property
+    def info(self) -> dict[str, Any]:
+        """Return the JSON/dict data currently in the tree."""
+        return self._info
+
+    @info.setter
+    def info(self, value: dict[str, Any]) -> None:
+        """Set new JSON/dict data and rebuild the tree."""
+        self._info = value
+        self.clear()  # clear old nodes
+        self.add_json(self._info, self.root)
+
+    @work(exclusive=True)
+    async def action_edit_title(self) -> None:
+        """Edit the title of MKV container."""
+
+        if not hasattr(self.app, "mkv_manager") or self.app.mkv_manager.mkv is None:
+            self.notify("Open MKV First", severity="error")
+            return
+
+        mkv = self.app.mkv_manager.mkv
+        new_title = await self.app.push_screen(
+            EditScreen(
+                value=mkv.title,
+                title="Edit MKV Title",
+                placeholder="Enter new title...",
+            ),
+            wait_for_dismiss=True,
+        )
+        if new_title:
+            try:
+                mkv.title = new_title.strip()
+                self.notify(
+                    f"Title updated: {new_title.strip()}", severity="information"
+                )
+            except ValueError as e:
+                self.notify(str(e), severity="error")
