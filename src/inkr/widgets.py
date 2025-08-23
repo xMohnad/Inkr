@@ -226,8 +226,16 @@ class InfoTree(Tree[None]):
         Binding("o", "open_video", "Open Video", show=False),
     ]
 
-    def __init__(self, label: str = "INFO") -> None:
-        super().__init__(label)
+    def __init__(
+        self,
+        label: TextType = "INFO",
+        *,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+        disabled: bool = False,
+    ) -> None:
+        super().__init__(label, name=name, id=id, classes=classes, disabled=disabled)
         self._info: dict[str, Any] = {}
 
     # --- property ---

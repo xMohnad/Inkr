@@ -9,7 +9,7 @@ from textual.widgets import Footer, Header, TabbedContent, TabPane
 from textual_fspicker import FileOpen, FileSave
 
 from .mkv_manager import MkvManager
-from .widgets import ListTrack
+from .widgets import InfoTree, ListTrack
 
 
 class Inkr(App):
@@ -19,13 +19,15 @@ class Inkr(App):
     def compose(self) -> ComposeResult:
         yield Header()
         # TODO: Add more tabs for info, chapters and attachments
-        with TabbedContent(initial="track"):
-            with TabPane("Track", id="track"):
-                yield ListTrack()
+        with TabbedContent(initial="info-tab", id="tabs"):
+            with TabPane("Info", id="info-tab"):
+                yield InfoTree(id="info")
+            with TabPane("Track", id="track-tab"):
+                yield ListTrack(id="track")
         yield Footer()
 
     async def action_open(self):
-        self.query_one(ListTrack).loading = True
+        self.query_one(TabbedContent).loading = True
         self.push_screen(FileOpen(), callback=self.initialize_mkv_manager)  # pyright: ignore
 
     @work(exclusive=True, thread=True)
@@ -34,10 +36,12 @@ class Inkr(App):
             self.notify("Canceled")
         else:
             self.mkv_manager = MkvManager(file)
+
+            self.query_one(InfoTree).info = self.mkv_manager.info_json or {}
             self.query_one(ListTrack).on_mount()
             self.bind("s", "save", description="Save")
 
-        self.query_one(ListTrack).loading = False
+        self.query_one(TabbedContent).loading = False
 
     @work(exclusive=True)
     async def action_save(self):
