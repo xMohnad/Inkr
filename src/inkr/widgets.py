@@ -97,8 +97,6 @@ class ListTrack(ListView):
             return self.notify("Open MKV First")
 
         path = await self.app.push_screen(FileOpen(), wait_for_dismiss=True)
-        if not path:
-            return self.notify("Canceled")
 
         async def background_work() -> None:
             """Background task for track processing."""

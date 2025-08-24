@@ -33,19 +33,18 @@ class Inkr(App):
     @work(exclusive=True, thread=True)
     async def initialize_mkv_manager(self, file):
         if not file:
-            self.notify("Canceled")
-        else:
-            try:
-                self.mkv_manager = MkvManager(file)
-            except Exception as e:
-                self.query_one(TabbedContent).loading = False
-                self.notify(str(e), severity="error")
-                return self.log(e)
+            return
 
-            self.query_one(InfoTree).data = self.mkv_manager.info_json or {}
-            self.query_one(ListTrack).on_mount()
-            self.bind("s", "save", description="Save")
+        try:
+            self.mkv_manager = MkvManager(file)
+        except Exception as e:
+            self.query_one(TabbedContent).loading = False
+            self.notify(str(e), severity="error")
+            return self.log(e)
 
+        self.query_one(InfoTree).data = self.mkv_manager.info_json or {}
+        self.query_one(ListTrack).on_mount()
+        self.bind("s", "save", description="Save")
         self.query_one(TabbedContent).loading = False
 
     @work(exclusive=True)
@@ -54,10 +53,8 @@ class Inkr(App):
             FileSave(default_file=self.mkv_manager.filepath.name),
             wait_for_dismiss=True,
         )
-        if not save_path:
-            return self.notify("Canceled")
-
-        self.mkv_manager.save(save_path)
+        if save_path:
+            self.mkv_manager.save(save_path)
 
 
 def main():
