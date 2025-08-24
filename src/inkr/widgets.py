@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 from textual import on, work
 from textual.binding import Binding
-from textual.widgets import Checkbox, ListView
+from textual.reactive import Reactive
+from textual.widgets import Checkbox, ListView, Tree
 from textual.widgets._toggle_button import ToggleButton
 from textual_fspicker import FileOpen
 
@@ -88,7 +89,6 @@ class ListTrack(ListView):
                 await self.clear()
                 await self.extend([track.list_item() for track in self.tracks])
             self.index = 0
-            self.focus()
 
     @work(exclusive=True)
     async def action_add_track(self):
@@ -110,11 +110,8 @@ class ListTrack(ListView):
                 self.app.call_from_thread(self.append, track)
             except Exception as e:
                 self.notify(f"Error adding track: {str(e)}", severity="error")
-            finally:
-                self.loading = False
 
         # Start background processing
-        self.loading = True
         self.run_worker(
             background_work,
             thread=True,
@@ -214,3 +211,56 @@ class ListTrack(ListView):
     @property
     def get_checkbox(self):
         return cast(CheckboxMeta, self.children[self.index].children[0])
+
+
+class InfoTree(Tree[None]):
+    """A widget that displays MKV Info."""
+
+    app: Inkr
+
+    data = Reactive(dict[str, Any])
+    BINDINGS = [
+        Binding("t", "edit_title", "Edit Title"),
+        Binding("j", "cursor_down", show=False),
+        Binding("k", "cursor_up", show=False),
+        Binding("h", "scroll_left", show=False),
+        Binding("l", "scroll_right", show=False),
+        Binding("o", "open_video", "Open Video", show=False),
+    ]
+
+    # --- property ---
+    async def watch_data(self, data: dict) -> None:
+        """
+        Reactive watcher for the `data` attribute.
+
+        Args:
+            data (dict): A dictionary representing the new data to display.
+                Typically this will be MKV metadata or any JSON-like structure.
+        """
+        self.clear()
+        self.add_json(data, self.root)
+
+    @work(exclusive=True)
+    async def action_edit_title(self) -> None:
+        """Edit the title of MKV container."""
+        if not hasattr(self.app, "mkv_manager") or self.app.mkv_manager.mkv is None:
+            self.notify("Open MKV First", severity="error")
+            return
+
+        mkv = self.app.mkv_manager.mkv
+        new_title = await self.app.push_screen(
+            EditScreen(
+                value=mkv.title,
+                title="Edit MKV Title",
+                placeholder="Enter new title...",
+            ),
+            wait_for_dismiss=True,
+        )
+        if new_title:
+            try:
+                mkv.title = new_title.strip()
+                self.notify(
+                    f"Title updated: {new_title.strip()}", severity="information"
+                )
+            except ValueError as e:
+                self.notify(str(e), severity="error")

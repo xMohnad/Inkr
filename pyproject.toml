@@ -4,35 +4,28 @@ version = "0.1.1"
 description = "A tool for managing MKV files"
 authors = [{ name = "xMohnad" }]
 
-dependencies = [
-  "pymkv2>=2.1.1",
-  "textual>=2.1.2",
-  "textual_fspicker>=0.4.1"
-]
+dependencies = ["pymkv2>=2.1.1", "textual>=2.1.2", "textual_fspicker>=0.4.1"]
 
 readme = "README.md"
-license-files = ["LICENSE"]
-license = "MIT"
+license = { file = "LICENSE" }
 requires-python = ">=3.9"
 
 classifiers = [
-    "Environment :: Console",
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Terminals",
-    "Topic :: Software Development :: Libraries",
-    "Typing :: Typed",
+  "Environment :: Console",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Terminals",
+  "Topic :: Software Development :: Libraries",
+  "Typing :: Typed",
 ]
 
-keywords = [
-    "terminal",
-]
+keywords = ["terminal"]
 
 [project.urls]
 Repository = "https://github.com/xMohnad/Inkr"

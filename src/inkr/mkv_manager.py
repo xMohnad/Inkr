@@ -19,6 +19,7 @@ class MkvManager:
 
         self.mkv: MKVFile = MKVFile(filepath)
         self.tracks: List[Track] = Track.from_mkvtracks(self.mkv.tracks)
+        self.info_json = self.mkv._info_json
 
     def save(self, save_path: Path) -> None:
         """
