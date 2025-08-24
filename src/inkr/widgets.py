@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 from textual import on, work
 from textual.binding import Binding
+from textual.reactive import Reactive
 from textual.widgets import Checkbox, ListView, Tree
 from textual.widgets._toggle_button import ToggleButton
 from textual_fspicker import FileOpen
@@ -217,6 +218,7 @@ class InfoTree(Tree[None]):
 
     app: Inkr
 
+    data = Reactive(dict[str, Any])
     BINDINGS = [
         Binding("t", "edit_title", "Edit Title"),
         Binding("j", "cursor_down", show=False),
@@ -226,35 +228,21 @@ class InfoTree(Tree[None]):
         Binding("o", "open_video", "Open Video", show=False),
     ]
 
-    def __init__(
-        self,
-        label: TextType = "INFO",
-        *,
-        name: str | None = None,
-        id: str | None = None,
-        classes: str | None = None,
-        disabled: bool = False,
-    ) -> None:
-        super().__init__(label, name=name, id=id, classes=classes, disabled=disabled)
-        self._info: dict[str, Any] = {}
-
     # --- property ---
-    @property
-    def info(self) -> dict[str, Any]:
-        """Return the JSON/dict data currently in the tree."""
-        return self._info
+    async def watch_data(self, data: dict) -> None:
+        """
+        Reactive watcher for the `data` attribute.
 
-    @info.setter
-    def info(self, value: dict[str, Any]) -> None:
-        """Set new JSON/dict data and rebuild the tree."""
-        self._info = value
-        self.clear()  # clear old nodes
-        self.add_json(self._info, self.root)
+        Args:
+            data (dict): A dictionary representing the new data to display.
+                Typically this will be MKV metadata or any JSON-like structure.
+        """
+        self.clear()
+        self.add_json(data, self.root)
 
     @work(exclusive=True)
     async def action_edit_title(self) -> None:
         """Edit the title of MKV container."""
-
         if not hasattr(self.app, "mkv_manager") or self.app.mkv_manager.mkv is None:
             self.notify("Open MKV First", severity="error")
             return

@@ -21,7 +21,7 @@ class Inkr(App):
         # TODO: Add more tabs for info, chapters and attachments
         with TabbedContent(initial="info-tab", id="tabs"):
             with TabPane("Info", id="info-tab"):
-                yield InfoTree(id="info")
+                yield InfoTree("INFO", id="info")
             with TabPane("Track", id="track-tab"):
                 yield ListTrack(id="track")
         yield Footer()
@@ -42,7 +42,7 @@ class Inkr(App):
                 self.notify(str(e), severity="error")
                 return self.log(e)
 
-            self.query_one(InfoTree).info = self.mkv_manager.info_json or {}
+            self.query_one(InfoTree).data = self.mkv_manager.info_json or {}
             self.query_one(ListTrack).on_mount()
             self.bind("s", "save", description="Save")
 
