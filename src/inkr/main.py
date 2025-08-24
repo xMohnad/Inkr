@@ -35,7 +35,12 @@ class Inkr(App):
         if not file:
             self.notify("Canceled")
         else:
-            self.mkv_manager = MkvManager(file)
+            try:
+                self.mkv_manager = MkvManager(file)
+            except Exception as e:
+                self.query_one(TabbedContent).loading = False
+                self.notify(str(e), severity="error")
+                return self.log(e)
 
             self.query_one(InfoTree).info = self.mkv_manager.info_json or {}
             self.query_one(ListTrack).on_mount()
