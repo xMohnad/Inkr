@@ -52,7 +52,7 @@ requires = ["uv_build>=0.8.11,<0.9.0"]
 build-backend = "uv_build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/inkr"]
+packages = ["src/pyinkr"]
 
 [project.scripts]
-inkr = "inkr.main:main"
+inkr = "pyinkr.main:main"
