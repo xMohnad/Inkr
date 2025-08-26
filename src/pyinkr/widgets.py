@@ -13,9 +13,9 @@ if TYPE_CHECKING:
     from rich.console import RenderableType
     from rich.text import TextType
 
-    from inkr.main import Inkr
+    from pyinkr.main import Inkr
 
-from inkr.screen import EditScreen
+from pyinkr.screen import EditScreen
 
 MetadataType = TypeVar("MetadataType")
 

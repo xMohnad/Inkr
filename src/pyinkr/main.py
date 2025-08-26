@@ -8,8 +8,8 @@ from textual.binding import Binding
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 from textual_fspicker import FileOpen, FileSave
 
-from .mkv_manager import MkvManager
-from .widgets import InfoTree, ListTrack
+from pyinkr.mkv_manager import MkvManager
+from pyinkr.widgets import InfoTree, ListTrack
 
 
 class Inkr(App):
