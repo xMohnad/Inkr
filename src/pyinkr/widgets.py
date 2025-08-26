@@ -9,7 +9,7 @@ from textual.widgets import Checkbox, ListView, Tree
 from textual.widgets._toggle_button import ToggleButton
 from textual_fspicker import FileOpen
 
-from pyinkr.screen import EditScreen
+from pyinkr.dialogs import EditScreen
 
 if TYPE_CHECKING:
     from rich.console import RenderableType
