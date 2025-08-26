@@ -13,7 +13,6 @@ requires-python = ">=3.9"
 classifiers = [
   "Environment :: Console",
   "Development Status :: 4 - Beta",
-  "Intended Audience :: Developers",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
@@ -21,7 +20,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Topic :: Terminals",
-  "Topic :: Software Development :: Libraries",
+  "Topic :: Multimedia :: Video",
   "Typing :: Typed",
 ]
 
@@ -33,25 +32,24 @@ Source = "https://github.com/xMohnad/Inkr"
 Issues = "https://github.com/xMohnad/Inkr/issues"
 Discussions = "https://github.com/xMohnad/Inkr/discussions"
 
-[tool.rye]
+[tool.uv]
 managed = true
-# dev-dependencies = [
-#     "pre-commit>=4.0.1",
-#     "mypy>=1.14.1",
-#     "mkdocstrings[python]>=0.28.2",
-#     "mkdocs-material>=9.6.5",
-#     "ruff>=0.9.8",
-# ]
+dev-dependencies = [
+    "pre-commit>=4.0.1",
+    "mypy>=1.14.1",
+    "ruff>=0.9.8",
+    "codespell>=2.4.1",
+    "ruff>=0.12.9",
+  "ptpython>=3.0.0",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.uv]
-package = true
 
 [build-system]
-requires = ["setuptools>=61.0.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.8.11,<0.9.0"]
+build-backend = "uv_build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/inkr"]
