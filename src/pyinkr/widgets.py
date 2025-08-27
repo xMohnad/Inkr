@@ -93,26 +93,24 @@ class ListTrack(ListView):
     async def action_add_track(self):
         """Add a new track to the MKV file."""
 
-        path = await self.app.push_screen_wait(FileOpen())
+        if path := await self.app.push_screen_wait(FileOpen()):
+            self.notify("Processing track in the background...", markup=True)
 
-        async def background_work() -> None:
-            """Background task for track processing."""
-            try:
-                # Process file in background
-                track = self.app.manager.add_track(str(path)).list_item()
+            async def background_work() -> None:
+                """Background task for track processing."""
+                try:
+                    # Process file in background
+                    track = self.app.manager.add_track(str(path)).list_item()
 
-                # Update UI from main thread
-                self.app.call_from_thread(self.append, track)
-            except Exception as e:
-                self.notify(f"Error adding track: {str(e)}", severity="error")
+                    # Update UI from main thread
+                    self.app.call_from_thread(self.append, track)
+                except Exception as e:
+                    self.notify(f"Error adding track: {str(e)}", severity="error")
 
-        # Start background processing
-        self.run_worker(
-            background_work,
-            thread=True,
-            exclusive=True,
-            name="Add Track Worker",
-        )
+            # Start background processing
+            self.run_worker(
+                background_work(), "Add Track Worker", thread=True, exclusive=True
+            )
 
     async def action_toggle_default(self):
         """Set the selected track as default."""

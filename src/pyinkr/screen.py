@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 from textual_fspicker import FileOpen, FileSave
@@ -23,28 +25,30 @@ class OpenScreen(Screen[MkvManager]):
         Binding("o", "open", "Open"),
         Binding("escape", "back", "Back", tooltip="Back To Opened MKV"),
     ]
+    path = reactive(Path, init=False)
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Footer()
 
-    def action_open(self):
-        def open(path):
-            if path:
-                self.loading = True
-                self.__init_manager(path)
+    def watch_path(self, path: Path):
+        self.loading = True
 
-        self.app.push_screen(FileOpen(), open)
+        async def init_manager():
+            try:
+                manager = MkvManager(str(path))
+                self.dismiss(manager)
+            except Exception as e:
+                self.notify(str(e), severity="error")
 
-    @work(exclusive=True, thread=True, group="init_manager")
-    async def __init_manager(self, path):
-        try:
-            manager = MkvManager(path)
-            self.dismiss(manager)
-        except Exception as e:
-            self.notify(str(e), severity="error")
+            self.loading = False
 
-        self.loading = False
+        self.run_worker(init_manager, exclusive=True, thread=True)
+
+    @work(exclusive=True)
+    async def action_open(self):
+        if path := await self.app.push_screen_wait(FileOpen()):
+            self.path = path
 
     async def action_back(self):
         if hasattr(self.app, "manager"):
