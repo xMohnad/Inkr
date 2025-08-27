@@ -85,7 +85,6 @@ class ListTrack(ListView):
         """Mount the tracks when the widget is mounted."""
         self.tracks = self.app.manager.tracks
         async with self.batch():
-            await self.clear()
             await self.extend([track.list_item() for track in self.tracks])
         self.index = 0
 
@@ -219,8 +218,7 @@ class InfoTree(Tree[None]):
             data (dict): A dictionary representing the new data to display.
                 Typically this will be MKV metadata or any JSON-like structure.
         """
-        self.clear()
-        self.add_json(data, self.root)
+        self.add_json(data)
 
     @work(exclusive=True)
     async def action_edit_title(self) -> None:
