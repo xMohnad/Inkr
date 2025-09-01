@@ -104,7 +104,9 @@ class ListTrack(ListView):
                     # Update UI from main thread
                     self.app.call_from_thread(self.append, track)
                 except Exception as e:
-                    self.notify(f"Error adding track: {str(e)}", severity="error")
+                    self.app.call_from_thread(
+                        self.notify, f"Error adding track: {str(e)}", severity="error"
+                    )
 
             # Start background processing
             self.run_worker(
@@ -223,18 +225,15 @@ class InfoTree(Tree[None]):
     @work(exclusive=True)
     async def action_edit_title(self) -> None:
         """Edit the title of MKV container."""
-        title = await self.app.push_screen_wait(
+        if title := await self.app.push_screen_wait(
             EditScreen(
                 value=self.app.manager.mkv.title,
                 title="Edit MKV Title",
                 placeholder="Enter new title...",
             )
-        )
-        if not title:
-            return
-
-        try:
-            self.app.manager.mkv.title = (new_title := title.strip())
-            self.notify(f"Title updated: {new_title.strip()}", severity="information")
-        except ValueError as e:
-            self.notify(str(e), severity="error")
+        ):
+            try:
+                self.app.manager.mkv.title = (new_title := title.strip())
+                self.notify(f"Title updated: {new_title}", severity="information")
+            except ValueError as e:
+                self.notify(str(e), severity="error")

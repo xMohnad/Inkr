@@ -31,19 +31,17 @@ class OpenScreen(Screen[MkvManager]):
         yield Header()
         yield Footer()
 
-    def watch_path(self, path: Path):
-        self.loading = True
+    @work(exclusive=True, thread=True)
+    async def watch_path(self, path: Path):
+        self.app.call_from_thread(setattr, self, "loading", True)
 
-        async def init_manager():
-            try:
-                manager = MkvManager(str(path))
-                self.dismiss(manager)
-            except Exception as e:
-                self.notify(str(e), severity="error")
+        try:
+            manager = MkvManager(str(path))
+            self.app.call_from_thread(self.dismiss, manager)
+        except Exception as e:
+            self.app.call_from_thread(self.notify, str(e), severity="error")
 
-            self.loading = False
-
-        self.run_worker(init_manager, exclusive=True, thread=True)
+        self.app.call_from_thread(setattr, self, "loading", False)
 
     @work(exclusive=True)
     async def action_open(self):
@@ -76,13 +74,16 @@ class MkvManagScreen(Screen):
 
     @work(exclusive=True)
     async def action_back_to_open(self):
+        focused_id = "#info"  # Default to info tab
+        if focused := self.focused:
+            focused_id = f"#{focused.id}"
         self.app.manager = await self.app.push_screen_wait("Open")
         await self.recompose()
+        self.query_one(focused_id).focus()
 
     @work(exclusive=True)
     async def action_save(self):
-        save_path = await self.app.push_screen_wait(
+        if save_path := await self.app.push_screen_wait(
             FileSave(default_file=self.app.manager.filepath.name)
-        )
-        if save_path:
+        ):
             self.app.manager.save(save_path)
