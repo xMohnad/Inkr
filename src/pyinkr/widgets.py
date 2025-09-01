@@ -5,9 +5,12 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 from textual import on, work
 from textual.binding import Binding
 from textual.reactive import Reactive
+from textual.widget import Widget
 from textual.widgets import Checkbox, ListView, Tree
 from textual.widgets._toggle_button import ToggleButton
 from textual_fspicker import FileOpen
+
+from pyinkr.dialogs import EditScreen
 
 if TYPE_CHECKING:
     from rich.console import RenderableType
@@ -15,7 +18,6 @@ if TYPE_CHECKING:
 
     from pyinkr.main import Inkr
 
-from pyinkr.screen import EditScreen
 
 MetadataType = TypeVar("MetadataType")
 
@@ -75,7 +77,6 @@ class ListTrack(ListView):
         Binding("l", "edit_lang", "Lang"),
         Binding("d", "toggle_default", "Toggle Default"),
         Binding("space", "select", "Select", show=False),
-        Binding("o", "open_video", "Open Video", show=False),
         Binding("alt+up", "move_up", "Move Up", show=False),
         Binding("alt+down", "move_down", "Move Down", show=False),
     ]
@@ -83,45 +84,38 @@ class ListTrack(ListView):
     @work(exclusive=True)
     async def on_mount(self):
         """Mount the tracks when the widget is mounted."""
-        if hasattr(self.app, "mkv_manager"):
-            self.tracks = self.app.mkv_manager.tracks
-            async with self.batch():
-                await self.clear()
-                await self.extend([track.list_item() for track in self.tracks])
-            self.index = 0
+        self.tracks = self.app.manager.tracks
+        async with self.batch():
+            await self.extend([track.list_item() for track in self.tracks])
+        self.index = 0
 
     @work(exclusive=True)
     async def action_add_track(self):
         """Add a new track to the MKV file."""
-        if not hasattr(self.app, "mkv_manager"):
-            return self.notify("Open MKV First")
 
-        path = await self.app.push_screen(FileOpen(), wait_for_dismiss=True)
+        if path := await self.app.push_screen_wait(FileOpen()):
+            self.notify("Processing track in the background...", markup=True)
 
-        async def background_work() -> None:
-            """Background task for track processing."""
-            try:
-                # Process file in background
-                track = self.app.mkv_manager.add_track(str(path)).list_item()
+            async def background_work() -> None:
+                """Background task for track processing."""
+                try:
+                    # Process file in background
+                    track = self.app.manager.add_track(str(path)).list_item()
 
-                # Update UI from main thread
-                self.app.call_from_thread(self.append, track)
-            except Exception as e:
-                self.notify(f"Error adding track: {str(e)}", severity="error")
+                    # Update UI from main thread
+                    self.app.call_from_thread(self.append, track)
+                except Exception as e:
+                    self.app.call_from_thread(
+                        self.notify, f"Error adding track: {str(e)}", severity="error"
+                    )
 
-        # Start background processing
-        self.run_worker(
-            background_work,
-            thread=True,
-            exclusive=True,
-            name="Add Track Worker",
-        )
+            # Start background processing
+            self.run_worker(
+                background_work(), "Add Track Worker", thread=True, exclusive=True
+            )
 
     async def action_toggle_default(self):
         """Set the selected track as default."""
-        if not hasattr(self.app, "mkv_manager"):
-            return self.notify("Open MKV First")
-
         if self.index is not None:
             checkbox = self.get_checkbox
             track = checkbox.metadata
@@ -152,7 +146,7 @@ class ListTrack(ListView):
         """Move the selected track up."""
         if self.index is not None and self.index > 0:
             track = self.get_checkbox.metadata
-            self.app.mkv_manager.move_track_backward(self.index)
+            self.app.manager.move_track_backward(self.index)
             self.pop(self.index)
             await self.insert(self.index - 1, [track.list_item()])
             self.index -= 1
@@ -161,7 +155,7 @@ class ListTrack(ListView):
         """Move the selected track down."""
         if self.index is not None and self.index < len(self.tracks) - 1:
             track = self.get_checkbox.metadata
-            self.app.mkv_manager.move_track_forward(self.index)
+            self.app.manager.move_track_forward(self.index)
             self.pop(self.index)
             await self.insert(self.index + 2, [track.list_item()])
             self.index += 1
@@ -171,9 +165,6 @@ class ListTrack(ListView):
         self, attribute: str, title: str, placeholder: str, screen_name: str
     ) -> None:
         """Helper function to edit a track attribute."""
-        if not hasattr(self.app, "mkv_manager"):
-            self.notify("Open MKV First", severity="error")
-            return
 
         if self.index is None:
             self.notify("No track selected", severity="warning")
@@ -182,22 +173,16 @@ class ListTrack(ListView):
         checkbox = self.get_checkbox
         track = checkbox.metadata
 
-        new_value = await self.app.push_screen(
+        new_value = await self.app.push_screen_wait(
             EditScreen(
                 getattr(track, attribute),
                 title,
                 placeholder,
                 name=screen_name,
-            ),
-            wait_for_dismiss=True,
+            )
         )
 
-        if new_value is None:
-            return
-
-        new_value = new_value.strip()
-        if not new_value:
-            self.notify(f"{attribute.capitalize()} cannot be empty", severity="warning")
+        if new_value is None or not (new_value := new_value.strip()):
             return
 
         try:
@@ -223,10 +208,11 @@ class InfoTree(Tree[None]):
         Binding("k", "cursor_up", show=False),
         Binding("h", "scroll_left", show=False),
         Binding("l", "scroll_right", show=False),
-        Binding("o", "open_video", "Open Video", show=False),
     ]
 
-    # --- property ---
+    def on_mount(self):
+        self.data = self.app.manager.info_json
+
     async def watch_data(self, data: dict) -> None:
         """
         Reactive watcher for the `data` attribute.
@@ -235,30 +221,28 @@ class InfoTree(Tree[None]):
             data (dict): A dictionary representing the new data to display.
                 Typically this will be MKV metadata or any JSON-like structure.
         """
-        self.clear()
-        self.add_json(data, self.root)
+        self.add_json(data)
 
     @work(exclusive=True)
     async def action_edit_title(self) -> None:
         """Edit the title of MKV container."""
-        if not hasattr(self.app, "mkv_manager") or self.app.mkv_manager.mkv is None:
-            self.notify("Open MKV First", severity="error")
-            return
-
-        mkv = self.app.mkv_manager.mkv
-        new_title = await self.app.push_screen(
+        if title := await self.app.push_screen_wait(
             EditScreen(
-                value=mkv.title,
+                value=self.app.manager.mkv.title,
                 title="Edit MKV Title",
                 placeholder="Enter new title...",
-            ),
-            wait_for_dismiss=True,
-        )
-        if new_title:
+            )
+        ):
             try:
-                mkv.title = new_title.strip()
-                self.notify(
-                    f"Title updated: {new_title.strip()}", severity="information"
-                )
+                self.app.manager.mkv.title = (new_title := title.strip())
+                self.notify(f"Title updated: {new_title}", severity="information")
             except ValueError as e:
                 self.notify(str(e), severity="error")
+
+
+class NoticeWidget(Widget):
+    can_focus = True
+    can_focus_children = False
+
+    def render(self) -> RenderableType:
+        return "Press [bold green]o[/] to open a file  ⍩⃝"

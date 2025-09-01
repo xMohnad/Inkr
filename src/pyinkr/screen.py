@@ -1,65 +1,90 @@
+#!/usr/bin/env python
+
 from __future__ import annotations
 
-from typing import Optional
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-from textual import on
+from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal
-from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Header, Input
+from textual.reactive import reactive
+from textual.screen import Screen
+from textual.widgets import Footer, Header, TabbedContent, TabPane
+from textual_fspicker import FileOpen, FileSave
+
+from pyinkr.mkv_manager import MkvManager
+from pyinkr.widgets import InfoTree, ListTrack, NoticeWidget
+
+if TYPE_CHECKING:
+    from pyinkr.main import Inkr
 
 
-class EditScreen(ModalScreen[Optional[str]]):
-    """A modal screen for editing information"""
-
-    BINDINGS = [Binding("escape", "back", "Back")]
-
-    def __init__(
-        self,
-        value: Optional[str] = None,
-        title: str = "Edit",
-        placeholder: str = "",
-        name: Optional[str] = None,
-        id: Optional[str] = None,
-        classes: Optional[str] = None,
-    ) -> None:
-        """
-        Initialize the EditScreen.
-
-        Args:
-            value: The initial value for the input field.
-            title: The title to display at the top of the screen.
-            placeholder: Optional placeholder text for the input.
-            name: The name of the screen.
-            id: The ID of the screen.
-            classes: The CSS classes for the screen.
-        """
-        super().__init__(name=name, id=id, classes=classes)
-        self._value = value or ""
-        self._title = title
-        self._placeholder = placeholder
+class OpenScreen(Screen[MkvManager]):
+    BINDINGS = [
+        Binding("o", "open", "Open"),
+        Binding("escape", "back", "Back", tooltip="Back To Opened MKV"),
+    ]
+    path = reactive(Path, init=False)
 
     def compose(self) -> ComposeResult:
-        """Compose the screen layout."""
         yield Header()
-        with Container() as container:
-            container.border_title = self._title
-            yield Input(
-                value=self._value, id="edit-input", placeholder=self._placeholder
-            )
-            with Horizontal():
-                yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn")
+        yield NoticeWidget()
         yield Footer()
 
-    @on(Button.Pressed, "#save-btn")
-    @on(Input.Submitted, "#edit-input")
-    def save_name(self) -> None:
-        """Handle save button press - dismiss with the new value."""
-        self.dismiss(self.query_one("#edit-input", Input).value.strip())
+    @work(exclusive=True, thread=True)
+    async def watch_path(self, path: Path):
+        self.app.call_from_thread(setattr, self, "loading", True)
 
-    @on(Button.Pressed, "#cancel-btn")
-    def action_back(self) -> None:
-        """Handles cancellation (button or escape key)."""
-        self.dismiss(None)
+        try:
+            manager = MkvManager(str(path))
+            self.app.call_from_thread(self.dismiss, manager)
+        except Exception as e:
+            self.app.call_from_thread(self.notify, str(e), severity="error")
+
+        self.app.call_from_thread(setattr, self, "loading", False)
+
+    @work(exclusive=True)
+    async def action_open(self):
+        if path := await self.app.push_screen_wait(FileOpen()):
+            self.path = path
+
+    async def action_back(self):
+        if hasattr(self.app, "manager"):
+            await self.run_action("app.back")
+        else:
+            self.notify("Open MKV First", severity="warning")
+
+
+class MkvManagScreen(Screen):
+    BINDINGS = [
+        Binding("s", "save", "Save"),
+        Binding("escape", "back_to_open", "Back To Open Screen", False),
+    ]
+    app: Inkr
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        # TODO: Add more tabs for info, chapters and attachments
+        with TabbedContent(initial="info-tab", id="tabs"):
+            with TabPane("Info", id="info-tab"):
+                yield InfoTree("INFO", id="info")
+            with TabPane("Track", id="track-tab"):
+                yield ListTrack(id="track")
+        yield Footer()
+
+    @work(exclusive=True)
+    async def action_back_to_open(self):
+        focused_id = "#info"  # Default to info tab
+        if focused := self.focused:
+            focused_id = f"#{focused.id}"
+        self.app.manager = await self.app.push_screen_wait("Open")
+        await self.recompose()
+        self.query_one(focused_id).focus()
+
+    @work(exclusive=True)
+    async def action_save(self):
+        if save_path := await self.app.push_screen_wait(
+            FileSave(default_file=self.app.manager.filepath.name)
+        ):
+            self.app.manager.save(save_path)
