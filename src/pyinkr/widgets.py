@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 from textual import on, work
 from textual.binding import Binding
 from textual.reactive import Reactive
+from textual.widget import Widget
 from textual.widgets import Checkbox, ListView, Tree
 from textual.widgets._toggle_button import ToggleButton
 from textual_fspicker import FileOpen
@@ -237,3 +238,11 @@ class InfoTree(Tree[None]):
                 self.notify(f"Title updated: {new_title}", severity="information")
             except ValueError as e:
                 self.notify(str(e), severity="error")
+
+
+class NoticeWidget(Widget):
+    can_focus = True
+    can_focus_children = False
+
+    def render(self) -> RenderableType:
+        return "Press [bold green]o[/] to open a file  ⍩⃝"

@@ -41,3 +41,11 @@ EditScreen {
         }
     }
 }
+
+NoticeWidget {
+  height: 100%;
+  background: $background-lighten-1;
+  border: solid $secondary;
+  content-align: center middle;
+  color: $primary-lighten-3;
+}

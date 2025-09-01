@@ -14,7 +14,7 @@ from textual.widgets import Footer, Header, TabbedContent, TabPane
 from textual_fspicker import FileOpen, FileSave
 
 from pyinkr.mkv_manager import MkvManager
-from pyinkr.widgets import InfoTree, ListTrack
+from pyinkr.widgets import InfoTree, ListTrack, NoticeWidget
 
 if TYPE_CHECKING:
     from pyinkr.main import Inkr
@@ -29,6 +29,7 @@ class OpenScreen(Screen[MkvManager]):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        yield NoticeWidget()
         yield Footer()
 
     @work(exclusive=True, thread=True)
