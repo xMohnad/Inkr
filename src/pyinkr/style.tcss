@@ -1,45 +1,46 @@
 ListTrack { 
-    ListItem {
-        height: auto;
-        Checkbox {
-            width: 100%;
-            height: auto;
-        }
+  ListItem {
+    height: auto;
+    Checkbox {
+      width: 100%;
+      height: auto;
     }
+  }
 }
 
+
 EditScreen {
-    align: center middle;
-    
-    Container {
-        width: 85%;
-        height: auto;
-        min-height: 10;
-        padding: 1;
-        
-        border: $border;
-        background: $panel;
-        border-title-color: $text;
-        border-title-background: $panel;
-        border-subtitle-color: $text;
-        border-subtitle-background: $error;
-        
-        Input {
-            padding: 0 1;
-            margin-bottom: 1;
-        }
-        
-        Horizontal {
-            align: center middle;
-            height: auto;
-            margin-top: 1;
-            
-            Button {
-                min-width: 50%;
-                margin: 0 1;
-            }
-        }
+  align: center middle;
+
+  Container {
+    width: 85%;
+    height: auto;
+    min-height: 10;
+    padding: 1;
+
+    border: $border;
+    background: $panel;
+    border-title-color: $text;
+    border-title-background: $panel;
+    border-subtitle-color: $text;
+    border-subtitle-background: $error;
+
+    Input {
+      padding: 0 1;
+      margin-bottom: 1;
     }
+
+    Horizontal {
+      align: center middle;
+      height: auto;
+      margin-top: 1;
+
+      Button {
+        min-width: 50%;
+        margin: 0 1;
+      }
+    }
+  }
 }
 
 NoticeWidget {
