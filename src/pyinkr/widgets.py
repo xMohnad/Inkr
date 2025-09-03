@@ -1,69 +1,22 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any
 
-from textual import on, work
+from rich.text import Text
+from textual import work
 from textual.binding import Binding
 from textual.reactive import Reactive
 from textual.widget import Widget
-from textual.widgets import Checkbox, ListView, Tree
-from textual.widgets._toggle_button import ToggleButton
+from textual.widgets import Checkbox, ListItem, ListView, Tree
 from textual_fspicker import FileOpen
 
 from pyinkr.dialogs import EditScreen
 
 if TYPE_CHECKING:
+    from pymkv import MKVTrack
     from rich.console import RenderableType
-    from rich.text import TextType
 
     from pyinkr.main import Inkr
-
-
-MetadataType = TypeVar("MetadataType")
-
-
-class CheckboxMeta(Checkbox, Generic[MetadataType]):
-    def __init__(
-        self,
-        label: TextType = "",
-        value: bool = False,
-        button_first: bool = True,
-        metadata: MetadataType = None,
-        *,
-        name: str | None = None,
-        id: str | None = None,
-        classes: str | None = None,
-        disabled: bool = False,
-        tooltip: RenderableType | None = None,
-    ) -> None:
-        super().__init__(
-            label,
-            value,
-            button_first,
-            name=name,
-            id=id,
-            classes=classes,
-            disabled=disabled,
-            tooltip=tooltip,
-        )
-        self.metadata = metadata
-
-    class Changed(ToggleButton.Changed):
-        """Posted when the value of the checkbox changes.
-
-        This message can be handled using an `on_checkbox_changed` method.
-        """
-
-        @property
-        def checkbox(self) -> CheckboxMeta:
-            """The checkbox that was changed."""
-            assert isinstance(self._toggle_button, CheckboxMeta)
-            return self._toggle_button
-
-        @property
-        def control(self) -> CheckboxMeta:
-            """An alias for [Changed.checkbox][textual.widgets.Checkbox.Changed.checkbox]."""
-            return self.checkbox
 
 
 class ListTrack(ListView):
@@ -76,7 +29,7 @@ class ListTrack(ListView):
         Binding("n", "edit_name", "Name"),
         Binding("l", "edit_lang", "Lang"),
         Binding("d", "toggle_default", "Toggle Default"),
-        Binding("space", "select", "Select", show=False),
+        Binding("enter,space", "select", "Select", show=False),
         Binding("alt+up", "move_up", "Move Up", show=False),
         Binding("alt+down", "move_down", "Move Down", show=False),
     ]
@@ -86,56 +39,51 @@ class ListTrack(ListView):
         """Mount the tracks when the widget is mounted."""
         self.tracks = self.app.manager.tracks
         async with self.batch():
-            await self.extend([track.list_item() for track in self.tracks])
+            await self.extend([self.list_item(track) for track in self.tracks])
         self.index = 0
 
     @work(exclusive=True)
     async def action_add_track(self):
         """Add a new track to the MKV file."""
-
         if path := await self.app.push_screen_wait(FileOpen()):
-            self.notify("Processing track in the background...", markup=True)
-
-            async def background_work() -> None:
-                """Background task for track processing."""
-                try:
-                    # Process file in background
-                    track = self.app.manager.add_track(str(path)).list_item()
-
-                    # Update UI from main thread
-                    self.app.call_from_thread(self.append, track)
-                except Exception as e:
-                    self.app.call_from_thread(
-                        self.notify, f"Error adding track: {str(e)}", severity="error"
-                    )
-
-            # Start background processing
-            self.run_worker(
-                background_work(), "Add Track Worker", thread=True, exclusive=True
-            )
+            try:
+                self.app.manager.add_track(str(path))
+                track = self.list_item(self.tracks[-1])
+                self.append(track)
+            except Exception as e:
+                self.notify(f"Error adding track: {str(e)}", severity="error")
 
     async def action_toggle_default(self):
         """Set the selected track as default."""
-        if self.index is not None:
-            checkbox = self.get_checkbox
-            track = checkbox.metadata
-            track.toggle_default()
-            checkbox.label = track.formatted_text()
+        track = self.get_track
+        track.default_track = not track.default_track
+        self.get_checkbox.label = self.formatted_text(track)
 
+    @work(exclusive=True)
     async def action_edit_name(self):
         """Edit the name of the selected track."""
-        self.edit_track_attribute("name", "Edit Name", "Enter name...", "name_editor")
+        track = self.get_track
+        if name := await self.app.push_screen_wait(
+            EditScreen(track.track_name, "Edit Name", "Enter name...")
+        ):
+            try:
+                track.track_name = name
+                self.get_checkbox.label = self.formatted_text(track)
+            except Exception as e:
+                self.notify(f"Error: {str(e)}", severity="error")
 
+    @work(exclusive=True)
     async def action_edit_lang(self):
         """Edit the language of the selected MKV track."""
-        self.edit_track_attribute(
-            "language", "Edit Language", "Enter Language...", "language_editor"
-        )
-
-    @on(CheckboxMeta.Changed)
-    def on_changed(self, event: CheckboxMeta.Changed) -> None:
-        """Handle checkbox state changes."""
-        event.checkbox.metadata.toggle()
+        track = self.get_track
+        if lang := await self.app.push_screen_wait(
+            EditScreen(track.language, "Edit Language", "Enter Language...")
+        ):
+            try:
+                track.language = lang
+                self.get_checkbox.label = self.formatted_text(track)
+            except Exception as e:
+                self.notify(f"Error: {str(e)}", severity="error")
 
     def action_select(self):
         """Toggle selection state of the current track."""
@@ -145,55 +93,39 @@ class ListTrack(ListView):
     async def action_move_up(self):
         """Move the selected track up."""
         if self.index is not None and self.index > 0:
-            track = self.get_checkbox.metadata
             self.app.manager.move_track_backward(self.index)
-            self.pop(self.index)
-            await self.insert(self.index - 1, [track.list_item()])
+            self.move_child(self.index, before=self.index - 1)
             self.index -= 1
 
     async def action_move_down(self):
         """Move the selected track down."""
         if self.index is not None and self.index < len(self.tracks) - 1:
-            track = self.get_checkbox.metadata
             self.app.manager.move_track_forward(self.index)
-            self.pop(self.index)
-            await self.insert(self.index + 2, [track.list_item()])
+            self.move_child(self.index, after=self.index + 1)
             self.index += 1
 
-    @work(exclusive=True)
-    async def edit_track_attribute(
-        self, attribute: str, title: str, placeholder: str, screen_name: str
-    ) -> None:
-        """Helper function to edit a track attribute."""
-
-        if self.index is None:
-            self.notify("No track selected", severity="warning")
-            return
-
-        checkbox = self.get_checkbox
-        track = checkbox.metadata
-
-        new_value = await self.app.push_screen_wait(
-            EditScreen(
-                getattr(track, attribute),
-                title,
-                placeholder,
-                name=screen_name,
-            )
+    def formatted_text(self, track: "MKVTrack") -> Text:
+        """Return formatted text for display in a Checkbox."""
+        details = f"{track.language or ''} {track.track_codec or ''} {track.track_type or ''}".strip()
+        default_indicator = " (Default)" if track.default_track else ""
+        return Text(details, style="bold") + Text(
+            f" {track.track_name or 'Unnamed'}{default_indicator}",
+            style="italic dim bold",
         )
 
-        if new_value is None or not (new_value := new_value.strip()):
-            return
-
-        try:
-            setattr(track, attribute, new_value)
-            checkbox.label = track.formatted_text()
-        except ValueError as e:
-            self.notify(str(e), severity="error")
+    def list_item(self, track: "MKVTrack", value: bool = True) -> ListItem:
+        """Return a ListItem representatiOn of the track."""
+        return ListItem(Checkbox(self.formatted_text(track), value))
 
     @property
-    def get_checkbox(self):
-        return cast(CheckboxMeta, self.children[self.index].children[0])
+    def get_checkbox(self) -> "Checkbox":
+        assert self.index is not None
+        return self.children[self.index].query_one(Checkbox)
+
+    @property
+    def get_track(self) -> "MKVTrack":
+        assert self.index is not None
+        return self.tracks[self.index]
 
 
 class InfoTree(Tree[None]):
@@ -211,7 +143,7 @@ class InfoTree(Tree[None]):
     ]
 
     def on_mount(self):
-        self.data = self.app.manager.info_json
+        self.data = self.app.manager._info_json
 
     async def watch_data(self, data: dict) -> None:
         """
@@ -227,22 +159,20 @@ class InfoTree(Tree[None]):
     async def action_edit_title(self) -> None:
         """Edit the title of MKV container."""
         if title := await self.app.push_screen_wait(
-            EditScreen(
-                value=self.app.manager.mkv.title,
-                title="Edit MKV Title",
-                placeholder="Enter new title...",
-            )
+            EditScreen(self.app.manager.title, "Edit MKV Title", "Enter New title...")
         ):
             try:
-                self.app.manager.mkv.title = (new_title := title.strip())
-                self.notify(f"Title updated: {new_title}", severity="information")
+                self.app.manager.title = title
+                self.notify(f"Title updated: {title}", severity="information")
             except ValueError as e:
                 self.notify(str(e), severity="error")
 
 
 class NoticeWidget(Widget):
-    can_focus = True
-    can_focus_children = False
+    can_focus: bool = True
+    """Widget may receive focus."""
+    can_focus_children: bool = False
+    """Widget's children may receive focus."""
 
     def render(self) -> RenderableType:
         return "Press [bold green]o[/] to open a file  ⍩⃝"
