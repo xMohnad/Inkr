@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from rich.text import Text
 from textual import work
 from textual.binding import Binding
-from textual.reactive import Reactive
+from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Checkbox, ListItem, ListView, Tree
 from textual_fspicker import FileOpen
@@ -131,9 +131,6 @@ class ListTrack(ListView):
 class InfoTree(Tree[None]):
     """A widget that displays MKV Info."""
 
-    app: Inkr
-
-    data = Reactive(dict[str, Any])
     BINDINGS = [
         Binding("t", "edit_title", "Edit Title"),
         Binding("j", "cursor_down", show=False),
@@ -141,6 +138,9 @@ class InfoTree(Tree[None]):
         Binding("h", "scroll_left", show=False),
         Binding("l", "scroll_right", show=False),
     ]
+
+    app: Inkr
+    data = reactive(dict, init=False)
 
     def on_mount(self):
         self.data = self.app.manager._info_json

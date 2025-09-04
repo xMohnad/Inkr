@@ -23,7 +23,8 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
         Binding("o", "open", "Open"),
         Binding("escape", "back", "Back", tooltip="Back To Opened MKV"),
     ]
-    path = reactive(Path, init=False)
+
+    path = reactive(Path(), init=False)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -66,7 +67,7 @@ class MkvManagScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        # TODO: Add more tabs for info, chapters and attachments
+        # TODO: Add more tabs for chapters and attachments
         with TabbedContent(initial="info-tab", id="tabs"):
             with TabPane("Info", id="info-tab"):
                 yield InfoTree("INFO", id="info")
