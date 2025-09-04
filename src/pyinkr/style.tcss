@@ -1,17 +1,15 @@
-ListTrack { 
-  ListItem {
+ListItem {
+  height: auto;
+  &.-highlight {
+    color: $foreground;
+  }
+  Checkbox {
+    width: 100%;
     height: auto;
-    Checkbox {
-      width: 100%;
-      height: auto;
-
-      &:focus {
-        & > .toggle--label {
-          background: transparent;
-        }
-        & {
-          border: none;
-        }
+    &:focus {
+      border: none;
+      & > .toggle--label {
+        background: transparent;
       }
     }
   }

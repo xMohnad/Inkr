@@ -10,18 +10,21 @@ from textual.app import App
 from pyinkr.screen import MkvManagScreen, OpenScreen
 
 if TYPE_CHECKING:
-    from pyinkr.mkv_manager import MkvManager
+    from pathlib import Path
+
+    from pymkv import MKVFile
 
 
 class Inkr(App):
-    manager: "MkvManager"
+    manager: "MKVFile"
+    path: Path
 
     CSS_PATH = "style.tcss"
     SCREENS = {"Open": OpenScreen, "MkvManager": MkvManagScreen}
 
     @work(exclusive=True)
     async def on_mount(self):
-        self.manager = await self.push_screen_wait("Open")
+        self.manager, self.path = await self.push_screen_wait("Open")
         self.push_screen("MkvManager")
 
 

@@ -1,4 +1,5 @@
 lib      := pyinkr
+exec     := inkr
 src      := src/
 run      := uv run
 sync     := uv sync
@@ -27,14 +28,14 @@ console:			# Run the textual console
 
 .PHONY: dev
 dev: 					# Run in development mode with hot reload
-	textual run --dev -c "$(run) $(lib)"
+	textual run --dev -c "$(run) $(exec)"
 
 ##############################################################################
 # Setup/update packages the system requires.
 .PHONY: setup
 setup:				# Set up the repository for development
+	uv venv --allow-existing
 	$(sync)
-	$(run) pre-commit install
 
 .PHONY: update
 update:				# Update all dependencies
