@@ -36,6 +36,9 @@ pipx install pyinkr
 pip install pyinkr
 ```
 
+> [!NOTE]
+> To run the application, use the `inkr` command.
+
 ### For Developers
 
 1. Clone the repository:
@@ -48,48 +51,16 @@ pip install pyinkr
 1. Set up development environment:
 
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Linux/macOS
-   # OR
-   .venv\Scripts\activate    # Windows
-   ```
+   make setup
 
-1. Install in editable mode with dev dependencies:
-
-   ```bash
-   pip install -e .
+   # run application
+   make run
    ```
 
 ## Key Bindings
 
-### App-Level Bindings
-
-| Key | Action | Visible |
-|-----|--------|---------|
-| `o` | Open MKV file | ✓ |
-| `s` | Save MKV file | ✓ |
-
-### Track Management
-
-| Key | Action | Visible |
-|-----|--------|---------|
-| `a` | Add new track | ✓ |
-| `n` | Edit track name | ✓ |
-| `l` | Edit track language | ✓ |
-| `d` | Toggle default track status | ✓ |
-| `Space` | Toggle track selection (disables when off) | ✕ |
-| `Alt+↑` | Move track up | ✕ |
-| `Alt+↓` | Move track down | ✕ |
-
-### Navigation
-
-| Key | Action | Visible |
-|-----|--------|---------|
-| `↑` | Move cursor up | ✕ |
-| `↓` | Move cursor down | ✕ |
-| `Tab` | Focus next element | ✕ |
-| `Shift+Tab` | Focus previous element | ✕ |
-| `Esc` | Close modal/cancel action | ✓ |
+Press `Ctrl+p` to open the command palette
+and view all available key bindings.
 
 ## Dependencies
 
