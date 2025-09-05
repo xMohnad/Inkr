@@ -1,4 +1,4 @@
-# Inkr - MKV Editer
+# Inkr - MKV Editor
 
 Inkr is a simple tool for managing MKV files.
 
