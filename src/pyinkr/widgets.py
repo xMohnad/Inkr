@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from rich.text import Text
 from textual import work
@@ -35,7 +35,7 @@ class ListTrack(ListView):
     ]
 
     @work(exclusive=True)
-    async def on_mount(self):
+    async def on_mount(self) -> None:
         """Mount the tracks when the widget is mounted."""
         self.tracks = self.app.manager.tracks
         async with self.batch():
@@ -43,7 +43,7 @@ class ListTrack(ListView):
         self.index = 0
 
     @work(exclusive=True)
-    async def action_add_track(self):
+    async def action_add_track(self) -> None:
         """Add a new track to the MKV file."""
         if path := await self.app.push_screen_wait(FileOpen()):
             try:
@@ -53,14 +53,14 @@ class ListTrack(ListView):
             except Exception as e:
                 self.notify(f"Error adding track: {str(e)}", severity="error")
 
-    async def action_toggle_default(self):
+    async def action_toggle_default(self) -> None:
         """Set the selected track as default."""
         track = self.get_track
         track.default_track = not track.default_track
         self.get_checkbox.label = self.formatted_text(track)
 
     @work(exclusive=True)
-    async def action_edit_name(self):
+    async def action_edit_name(self) -> None:
         """Edit the name of the selected track."""
         track = self.get_track
         if name := await self.app.push_screen_wait(
@@ -73,7 +73,7 @@ class ListTrack(ListView):
                 self.notify(f"Error: {str(e)}", severity="error")
 
     @work(exclusive=True)
-    async def action_edit_lang(self):
+    async def action_edit_lang(self) -> None:
         """Edit the language of the selected MKV track."""
         track = self.get_track
         if lang := await self.app.push_screen_wait(
@@ -85,19 +85,19 @@ class ListTrack(ListView):
             except Exception as e:
                 self.notify(f"Error: {str(e)}", severity="error")
 
-    def action_select(self):
+    def action_select(self) -> None:
         """Toggle selection state of the current track."""
         if self.index is not None:
             self.get_checkbox.toggle()
 
-    async def action_move_up(self):
+    async def action_move_up(self) -> None:
         """Move the selected track up."""
         if self.index is not None and self.index > 0:
             self.app.manager.move_track_backward(self.index)
             self.move_child(self.index, before=self.index - 1)
             self.index -= 1
 
-    async def action_move_down(self):
+    async def action_move_down(self) -> None:
         """Move the selected track down."""
         if self.index is not None and self.index < len(self.tracks) - 1:
             self.app.manager.move_track_forward(self.index)
@@ -140,20 +140,21 @@ class InfoTree(Tree[None]):
     ]
 
     app: Inkr
-    data = reactive(dict, init=False)
+    data: reactive[dict[Any, Any] | None] = reactive(None, init=False)
 
-    def on_mount(self):
+    def on_mount(self) -> None:
+        """Called when the component is mounted to the DOM."""
         self.data = self.app.manager._info_json
 
-    async def watch_data(self, data: dict) -> None:
+    async def watch_data(self, data: Optional[dict[Any, Any]]) -> None:
         """
         Reactive watcher for the `data` attribute.
 
         Args:
-            data (dict): A dictionary representing the new data to display.
-                Typically this will be MKV metadata or any JSON-like structure.
+            data: The new data value that was set. Can be any decoded JSON structure.
         """
-        self.add_json(data)
+        if data:
+            self.add_json(data)
 
     @work(exclusive=True)
     async def action_edit_title(self) -> None:

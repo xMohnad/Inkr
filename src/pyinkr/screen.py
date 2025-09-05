@@ -32,7 +32,7 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
         yield Footer()
 
     @work(exclusive=True, thread=True)
-    async def watch_path(self, path: Path):
+    async def watch_path(self, path: Path) -> None:
         try:
             manager = MKVFile(path)
             self.app.call_from_thread(self.dismiss, (manager, path))
@@ -42,19 +42,19 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
             self.app.call_from_thread(setattr, self, "loading", False)
 
     @work(exclusive=True)
-    async def action_open(self):
+    async def action_open(self) -> None:
         if path := await self.app.push_screen_wait(FileOpen()):
             self.loading = True
             self.path = path
 
-    async def action_back(self):
+    async def action_back(self) -> None:
         if hasattr(self.app, "manager"):
             await self.run_action("app.back")
         else:
             self.notify("Open MKV First", severity="warning")
 
 
-class MkvManagScreen(Screen):
+class MkvManagScreen(Screen[None]):
     BINDINGS = [
         Binding("s", "save", "Save"),
         Binding("w", "toggle_overwrite", "Overwrite video", False),

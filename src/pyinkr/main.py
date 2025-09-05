@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pymkv import MKVFile
 
 
-class Inkr(App):
+class Inkr(App[None]):
     manager: "MKVFile"
     path: Path
 
@@ -23,12 +23,12 @@ class Inkr(App):
     SCREENS = {"Open": OpenScreen, "MkvManager": MkvManagScreen}
 
     @work(exclusive=True)
-    async def on_mount(self):
+    async def on_mount(self) -> None:
         self.manager, self.path = await self.push_screen_wait("Open")
         self.push_screen("MkvManager")
 
 
-def main():
+def main() -> None:
     Inkr().run()
 
 
