@@ -45,9 +45,7 @@ class EditScreen(ModalScreen[Optional[str]]):
         yield Header()
         with Container() as container:
             container.border_title = self._title
-            yield Input(
-                value=self._value, id="edit-input", placeholder=self._placeholder
-            )
+            yield Input(value=self._value, id="edit-input", placeholder=self._placeholder)
             with Horizontal():
                 yield Button("Save", variant="primary", id="save-btn")
                 yield Button("Cancel", id="cancel-btn")

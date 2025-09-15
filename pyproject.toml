@@ -55,3 +55,6 @@ packages = ["src/pyinkr"]
 
 [project.scripts]
 inkr = "pyinkr.main:main"
+
+[tool.ruff]
+line-length = 120

@@ -63,9 +63,7 @@ class ListTrack(ListView):
     async def action_edit_name(self) -> None:
         """Edit the name of the selected track."""
         track = self.get_track
-        if name := await self.app.push_screen_wait(
-            EditScreen(track.track_name, "Edit Name", "Enter name...")
-        ):
+        if name := await self.app.push_screen_wait(EditScreen(track.track_name, "Edit Name", "Enter name...")):
             try:
                 track.track_name = name
                 self.get_checkbox.label = self.formatted_text(track)
@@ -76,9 +74,7 @@ class ListTrack(ListView):
     async def action_edit_lang(self) -> None:
         """Edit the language of the selected MKV track."""
         track = self.get_track
-        if lang := await self.app.push_screen_wait(
-            EditScreen(track.language, "Edit Language", "Enter Language...")
-        ):
+        if lang := await self.app.push_screen_wait(EditScreen(track.language, "Edit Language", "Enter Language...")):
             try:
                 track.language = lang
                 self.get_checkbox.label = self.formatted_text(track)
