@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from textual import on
 from textual.app import ComposeResult
@@ -9,20 +9,25 @@ from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Input
 
+if TYPE_CHECKING:
+    from typing import ClassVar, override
 
-class EditScreen(ModalScreen[Optional[str]]):
+    from textual.binding import BindingType
+
+
+class EditScreen(ModalScreen[str | None]):
     """A modal screen for editing information"""
 
-    BINDINGS = [Binding("escape", "back", "Back")]
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "back", "Back")]
 
     def __init__(
         self,
-        value: Optional[str] = None,
+        value: str | None = None,
         title: str = "Edit",
         placeholder: str = "",
-        name: Optional[str] = None,
-        id: Optional[str] = None,
-        classes: Optional[str] = None,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
     ) -> None:
         """
         Initialize the EditScreen.
@@ -36,10 +41,11 @@ class EditScreen(ModalScreen[Optional[str]]):
             classes: The CSS classes for the screen.
         """
         super().__init__(name=name, id=id, classes=classes)
-        self._value = value or ""
-        self._title = title
-        self._placeholder = placeholder
+        self._value: str = value or ""
+        self._title: str = title
+        self._placeholder: str = placeholder
 
+    @override
     def compose(self) -> ComposeResult:
         """Compose the screen layout."""
         yield Header()

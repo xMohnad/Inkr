@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, ClassVar, override
 
 from rich.text import Text
 from textual import work
@@ -15,6 +15,7 @@ from pyinkr.dialogs import EditScreen
 if TYPE_CHECKING:
     from pymkv import MKVTrack
     from rich.console import RenderableType
+    from textual.binding import BindingType
 
     from pyinkr.main import Inkr
 
@@ -23,8 +24,9 @@ class ListTrack(ListView):
     """List of MKV tracks."""
 
     app: Inkr
+    index: int | None
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("a", "add_track", "Add"),
         Binding("n", "edit_name", "Name"),
         Binding("l", "edit_lang", "Lang"),
@@ -37,7 +39,7 @@ class ListTrack(ListView):
     @work(exclusive=True)
     async def on_mount(self) -> None:
         """Mount the tracks when the widget is mounted."""
-        self.tracks = self.app.manager.tracks
+        self.tracks: list[MKVTrack] = self.app.manager.tracks  # pyright: ignore[reportUninitializedInstanceVariable]
         async with self.batch():
             await self.extend([self.list_item(track) for track in self.tracks])
         self.index = 0
@@ -127,7 +129,7 @@ class ListTrack(ListView):
 class InfoTree(Tree[None]):
     """A widget that displays MKV Info."""
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("t", "edit_title", "Edit Title"),
         Binding("j", "cursor_down", show=False),
         Binding("k", "cursor_up", show=False),
@@ -136,21 +138,22 @@ class InfoTree(Tree[None]):
     ]
 
     app: Inkr
-    data: reactive[dict[Any, Any] | None] = reactive(None, init=False)
+    info: reactive[dict[str, object] | None] = reactive(None, init=False)
 
+    @override
     def on_mount(self) -> None:
         """Called when the component is mounted to the DOM."""
-        self.data = self.app.manager._info_json
+        self.info = self.app.manager._info_json
 
-    async def watch_data(self, data: Optional[dict[Any, Any]]) -> None:
+    async def watch_info(self, info: dict[str, object]) -> None:
         """
         Reactive watcher for the `data` attribute.
 
         Args:
             data: The new data value that was set. Can be any decoded JSON structure.
         """
-        if data:
-            self.add_json(data)
+        if info:
+            self.add_json(info)  # pyright: ignore[reportUnknownMemberType]
 
     @work(exclusive=True)
     async def action_edit_title(self) -> None:
@@ -171,5 +174,6 @@ class NoticeWidget(Widget):
     can_focus_children: bool = False
     """Widget's children may receive focus."""
 
+    @override
     def render(self) -> RenderableType:
         return "Press [bold green]o[/] to open a file  ⍩⃝"

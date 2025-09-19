@@ -1,8 +1,6 @@
-#!/usr/bin/env python
-
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from textual import work
 from textual.app import App
@@ -13,14 +11,25 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from pymkv import MKVFile
+    from textual.driver import Driver
+    from textual.types import CSSPathType
 
 
 class Inkr(App[None]):
-    manager: "MKVFile"
-    path: Path
+    CSS_PATH: ClassVar[CSSPathType | None] = "style.tcss"
+    SCREENS = {"Open": OpenScreen, "MkvManager": MkvManagScreen}  # pyright: ignore[reportUnannotatedClassAttribute]
 
-    CSS_PATH = "style.tcss"
-    SCREENS = {"Open": OpenScreen, "MkvManager": MkvManagScreen}
+    def __init__(
+        self,
+        driver_class: type[Driver] | None = None,
+        css_path: CSSPathType | None = None,
+        watch_css: bool = False,
+        ansi_color: bool = False,
+    ):
+        self.manager: MKVFile
+        self.path: Path
+
+        super().__init__(driver_class, css_path, watch_css, ansi_color)
 
     @work(exclusive=True)
     async def on_mount(self) -> None:

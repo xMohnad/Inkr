@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, override
 
 from pymkv import MKVFile
 from textual import work
@@ -15,17 +15,23 @@ from textual_fspicker import FileOpen, FileSave
 from pyinkr.widgets import InfoTree, ListTrack, NoticeWidget
 
 if TYPE_CHECKING:
+    from textual.binding import BindingType
+    from textual.reactive import Reactive
+
     from pyinkr.main import Inkr
 
 
 class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("o", "open", "Open"),
         Binding("escape", "back", "Back", tooltip="Back To Opened MKV"),
     ]
 
-    path = reactive(Path(), init=False)
+    path: reactive[Path] = reactive(Path(), init=False)
+    app: Inkr
+    loading: Reactive[bool]
 
+    @override
     def compose(self) -> ComposeResult:
         yield Header()
         yield NoticeWidget()
@@ -55,7 +61,7 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
 
 
 class MkvManagScreen(Screen[None]):
-    BINDINGS = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("s", "save", "Save"),
         Binding("w", "toggle_overwrite", "Overwrite video", False),
         Binding("escape", "back_to_open", "Back To Open Screen", False),
@@ -65,6 +71,7 @@ class MkvManagScreen(Screen[None]):
     can_overwrite: bool = False
     """Flag to say if an existing file can be overwritten."""
 
+    @override
     def compose(self) -> ComposeResult:
         yield Header()
         # TODO: Add more tabs for chapters and attachments

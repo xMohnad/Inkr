@@ -58,3 +58,7 @@ inkr = "pyinkr.main:main"
 
 [tool.ruff]
 line-length = 120
+
+[tool.pyright]
+reportImportCycles = false
+reportUnusedCallResult = false
