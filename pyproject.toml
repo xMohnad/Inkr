@@ -4,7 +4,12 @@ version = "0.2.0"
 description = "A tool for managing MKV files"
 authors = [{ name = "xMohnad" }]
 
-dependencies = ["pymkv2>=2.1.1", "textual>=2.1.2", "textual_fspicker>=0.4.1"]
+dependencies = [
+  "dacite>=1.9.2",
+  "pymkv2>=2.1.1",
+  "textual>=2.1.2",
+  "textual_fspicker>=0.4.1",
+]
 
 readme = "README.md"
 license = "MIT"
@@ -34,13 +39,10 @@ Discussions = "https://github.com/xMohnad/Inkr/discussions"
 
 [tool.uv]
 managed = true
-dev-dependencies = [
-  "mypy>=1.14.1",
-  "codespell>=2.4.1",
-  "ruff>=0.12.9",
-  "ptpython>=3.0.0",
-  "textual-dev>=1.7.0",
-]
+
+[dependency-groups]
+lint = ["mypy>=1.14.1", "codespell>=2.4.1", "ruff>=0.12.9"]
+dev = ["ptpython>=3.0.0", "textual-dev>=1.7.0"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
