@@ -8,8 +8,8 @@ Usage Example:
 
     mkv = MkvMerge("input.mkv")
     mkv.add_track("extra_audio.mkv")
-    mkv.generate_command(as_string=True)
-    mkv.mux()
+    print(mkv.generate_command(as_string=True))  # Show mkvmerge command
+    mkv.mux()  # Execute muxing
     ```
 """
 
@@ -100,17 +100,13 @@ class MkvTrack:
 
     def generate_options(self) -> list[str]:
         """
-        Generate the mkvmerge command-line options for this track.
+        Generate mkvmerge command-line options for this track.
 
-        This method combines user-specified track options with default
-        ignored options based on the track type.
+        Combines user-specified options with default ignored options
+        based on track type.
 
         Returns:
-            list[str]: A list of command-line arguments suitable for mkvmerge.
-
-        Example:
-            For a video track with a specific language option:
-            ['--language', '0:eng', '--no-audio', '--no-subtitles', '--video-tracks', '0', '(', '/path/to/file.mkv', ')']
+            list[str]: Command-line arguments suitable for mkvmerge.
         """
         options: list[str] = []
 
@@ -155,14 +151,15 @@ class MkvMerge:
         file_path: Path,
         mkvmerge_path: str | Path | None = MKVMERGE_PATH,
     ) -> None:
-        """Create a Matroska muxing object
+        """Initialize MkvMerge object for a target MKV file.
 
         Args:
             file_path (Path): Path to the target Matroska (MKV) file.
-            mkvmerge_path (str | Path, optional): Path to the `mkvmerge` binary.
-                Defaults to the preconfigured `MKVMERGE_PATH`.
+            mkvmerge_path (str | Path, optional): Path to the mkvmerge binary.
+                Defaults to the preconfigured MKVMERGE_PATH.
+
         Raises:
-            FileNotFoundError: If `mkvmerge` not at the specified path
+            FileNotFoundError: If mkvmerge binary cannot be found.
         """
         if not mkvmerge_path:
             raise FileNotFoundError("mkvmerge is not at the specified path, add it there or set `mkvmerge_path`")
@@ -179,7 +176,7 @@ class MkvMerge:
         self.raw_info: dict[str, object] = {}
 
         self.file_path = file_path
-        self.options: GlobalOptions = GlobalOptions({"title": self.info.container.properties.title})
+        self.options: GlobalOptions = GlobalOptions(title=self.info.container.properties.title)
         """options to set for `mkvmerge`."""
 
         self.output: Path = Path("output.mkv")
@@ -204,24 +201,21 @@ class MkvMerge:
         """
         self._file_path = value
         self.info = self.get_info()
-        if not self.info.container.supported:
-            raise ValueError(f"'{self.file_path}' is not a supported Matroska file.")
-
         self.add_tracks_from_info(self.info.tracks, self.file_path)
 
     def get_info(self, file_path: None | Path = None) -> MkvInfo:
         """
-        Retrieve metadata about a Matroska file using mkvmerge JSON output.
+        Retrieve metadata for an MKV file using mkvmerge JSON output.
 
         Args:
             file_path (Path, optional): MKV file to inspect. Defaults to instance's `file_path`.
 
         Raises:
-            FileNotFoundError: If the file or mkvmerge binary cannot be found.
-            ValueError: If mkvmerge output cannot be parsed as JSON.
+            FileNotFoundError: If mkvmerge binary or file not found.
+            ValueError: If file is not supported or JSON cannot be parsed.
 
         Returns:
-            MkvInfo: Parsed metadata for the MKV file.
+            MkvInfo: Parsed metadata from mkvmerge JSON output.
         """
         file_path = file_path or self.file_path
         command = [self.mkvmerge_path, "-i", str(file_path), "-F", "json"]
@@ -231,12 +225,15 @@ class MkvMerge:
             raise FileNotFoundError("mkvmerge is not at the specified path, add it there")
 
         data: dict[str, object] = json.loads(output.stdout)  # pyright: ignore[reportAny]
+
+        if not data["container"]["supported"]:  # pyright: ignore[reportIndexIssue]
+            raise ValueError(f"'{file_path.name}' is not a supported Matroska file.")
         if file_path == self.file_path:
             self.raw_info = data
 
         return from_dict(MkvInfo, data)
 
-    def add_tracks_from_info(self, tracks_info: list[Track], source_file: Path, file_id: int = 0) -> None:
+    def add_tracks_from_info(self, tracks_info: list[Track], source_file: Path, file_id: int = 0) -> list[MkvTrack]:
         """
         Load all tracks from a Matroska file.
 
@@ -245,28 +242,25 @@ class MkvMerge:
             source_file (Path): Source file containing the tracks.
             file_id (int): File identifier for this source. Default is 0.
         """
+        new_tracks: list[MkvTrack] = []
         for track in tracks_info:
             new_track = MkvTrack(
                 source_file,
                 TrackOptions(
-                    {
-                        "track-name": track.properties.track_name,
-                        "language": track.properties.language,
-                        "default-track": track.properties.default_track,
-                        "forced-track": track.properties.forced_track,
-                        "hearing-impaired-flag": track.properties.flag_hearing_impaired,
-                        "visual-impaired-flag": track.properties.flag_visual_impaired,
-                        "original-flag": track.properties.flag_original,
-                        "commentary-flag": track.properties.flag_commentary,
-                    }
+                    track.properties.track_name,
+                    track.properties.language,
+                    track.properties.default_track,
+                    track.properties.forced_track,
                 ),
                 track,
                 track.id,
                 file_id,
             )
             self.tracks.append(new_track)
+            new_tracks.append(new_track)
+        return new_tracks
 
-    def add_track(self, track: Path) -> None:
+    def add_track(self, track: Path) -> list[MkvTrack]:
         """
         Add a new track from a file.
 
@@ -277,9 +271,7 @@ class MkvMerge:
             ValueError: If the file is not a supported Matroska file.
         """
         track_info = self.get_info(track)
-        if not track_info.container.supported:
-            raise ValueError(f"'{track}' is not a supported Matroska file.")
-        self.add_tracks_from_info(track_info.tracks, track, next(self._number_file))
+        return self.add_tracks_from_info(track_info.tracks, track, next(self._number_file))
 
     @property
     def track_order(self) -> list[str]:
@@ -349,13 +341,14 @@ class MkvMerge:
 
     def generate_command(self, as_string: bool = False) -> list[str] | str:
         """
-        Generate the mkvmerge command-line options.
+        Generate mkvmerge command-line arguments.
 
         Args:
-            as_string (bool): Return as a single string instead of list. Defaults to False.
+            as_string (bool): If True, return command as a single string for shell execution.
+                              Defaults to False (returns list of arguments).
 
         Returns:
-            list[str] | str: The command-line arguments for mkvmerge.
+            list[str] | str: Command-line arguments or single string for execution.
         """
         command = [str(self.mkvmerge_path)]
 
@@ -408,10 +401,15 @@ class MkvMerge:
         return file_path
 
     def mux(self) -> int:
-        """Mux all of the included sources, attachemts, and options.
+        """
+        Execute muxing with mkvmerge using all tracks and global options.
 
         Returns:
-            int: The status code of the `mkvmerge` mux.
+            int: Return code from mkvmerge process.
+
+        Notes:
+            - Command is written to a temporary JSON file.
+            - Temporary file is deleted after execution.
         """
         output_file = self.save_command()
         command = f'"{self.mkvmerge_path}" "@{output_file}"'

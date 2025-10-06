@@ -1,227 +1,190 @@
 """
-Provides a customizable options dictionary with hook-based validation
-for setting keys.
+Provides a flexible options system with hook-based validation and transformation logic.
 
-Key Type Mapping:
-    bool: Used for flag options (on/off switches).
-    None: Used for flags without values (presence only, e.g., ``--webm``).
-    str:  Used for textual options (e.g., name, language, title, tags, compression).
-    int:  Used for numeric options (e.g., sync delay in ms or frames).
+Overview:
+    Each field in an options class represents a configurable key, with type hints
+    determining what values are accepted. Hooks can be attached to validate or
+    modify values dynamically upon assignment.
 
-Hook definition methods:
-    1) Use @hook_for("key1", "key2", ...)
-    2) Or define a method named: _on_<key_with_-_replaced_by_>_set
-     e.g. for key "track-name" the hook name is "_on_track_name_set"
+Type semantics:
+    bool  -> Flag options (on/off switches).
+    None  -> Presence-only flags (e.g., ``--webm`` has no value, only presence).
+    str   -> Textual options (e.g., title, language, name).
+    int   -> Numeric options (e.g., synchronization delay in ms or frames).
 
-Hook return semantics:
-    - If hook returns False -> the assignment is blocked.
-    - If hook returns True or None -> assignment proceeds and the original value is used.
-    - If hook returns any other value -> that value is used as the *replacement* value to store.
+Hook declaration:
+    Hooks are methods that run automatically when a field is set. They can be defined in two ways:
+      1. Using the decorator: @hook_for("field1", "field2", ...)
+      2. By naming convention: define a method named _on_<field_name>_set
+
+Hook return behavior:
+    - Return False: cancel the assignment (value is rejected).
+    - Return True or None: accept the original value as-is.
+    - Return any other value: use that as the new stored value.
 
 Example:
     ```python
-    class MyOpts(OptionsDict[str, object]):
+    @dataclass
+    class MyOpts(Options):
+        title: str | None = None
+
         @hook_for("title")
         def _validate_and_normalize(self, value):
             if not isinstance(value, str):
                 return False
-            # normalize
+            # Normalize the string before storing
             return value.strip().lower()
 
     opts = MyOpts()
-    opts["title"] = "  Awesome Title  " # hook returns "awesome title" -> stored value is "awesome title"
+    opts.title = "  Awesome Title  "
+    print(opts.title)  # -> "awesome title"
     ```
 """
 
 from __future__ import annotations
 
-from typing import Callable, Generic, Literal, TypeVar, override
+from collections.abc import Iterable
+from dataclasses import dataclass, field, fields
+from functools import cached_property
+from typing import Callable, Final, Literal, TypeAlias, TypeVar, get_type_hints, override
 
+from dacite.types import is_optional
 from textual import log
 
-_KT = TypeVar("_KT")
-_VT = TypeVar("_VT")
+_ValueType: TypeAlias = bool | None | str | int
+_HookType: TypeAlias = Callable[..., _ValueType]
+_F = TypeVar("_F", bound=_HookType)
+
+FLAG_METADATA_KEY: Final = "presence-only"
+PRESENCE_ONLY_FIELD: Final[bool] = field(default=False, metadata={FLAG_METADATA_KEY: True})
 
 
-_F = TypeVar("_F", bound=Callable[..., object])
-
-
-def hook_for(*keys: str) -> Callable[[_F], _F]:
+def hook_for(*fields: str) -> Callable[[_F], _F]:
     """
-    Decorator to register one hook for multiple keys.
+    Decorator to register one hook for multiple fields.
 
     Example:
         ```python
-        @hook_for("track-name", "language")
-        def validate_string(self, value) -> bool:
+        @hook_for("track_name", "language")
+        def _validate_string(self, value) -> bool:
             return isinstance(value, str)
         ```
     """
 
     def decorator(func: _F) -> _F:
-        setattr(func, "_hook_keys", keys)
+        setattr(func, "_hook_fields", fields)
         return func
 
     return decorator
 
 
-class OptionsDict(dict[_KT, _VT], Generic[_KT, _VT]):
-    """A dictionary subclass that supports validation/transformation hooks when setting keys."""
-
-    def __init__(self, initial: dict[_KT, _VT] | None = None) -> None:
-        """
-        Initialize the dictionary optionally
-
-        Args:
-            initial (dict[_KT, _VT] | None): Optional initial dictionary
-                to pre-populate the OptionsDict. If None, starts empty.
-        """
-        super().__init__()
-
-        if initial:
-            self.update(initial)
-
-        # register hooks for multiple keys
+@dataclass
+class Options:
+    def __post_init__(self) -> None:
         for attr_name in dir(self):
-            method: Callable[[_VT], _VT | bool | None] | None = getattr(self, attr_name, None)
-            hook_keys: list[str] = getattr(method, "_hook_keys", [])
+            method: _HookType | None = getattr(self, attr_name, None)
+            hook_keys: list[str] = getattr(method, "_hook_fields", [])
 
             if callable(method) and hook_keys:
                 for key in hook_keys:
-                    setattr(self, f"_on_{self._convert_attr(key)}_set", method)
+                    setattr(self, f"_on_{key}_set", method)
+
+    @cached_property
+    def _types(self) -> dict[str, type]:
+        return get_type_hints(self.__class__)
 
     @override
-    def __setitem__(self, key: _KT, value: _VT, /) -> None:
-        """Set self[key] to value, possibly using a hook to validate/transform it."""
-        assert isinstance(key, str), f"Key must be a string, got {type(key).__name__}"
-
-        hook_name = f"_on_{self._convert_attr(key)}_set"
-        hook: Callable[[_VT], _VT | bool | None] | None = getattr(self, hook_name, None)
+    def __setattr__(self, name: str, value: object, /) -> None:
+        """Set an attribute, optionally using a hook to validate or transform the value."""
+        hook_name = f"_on_{name}_set"
+        hook: _HookType | None = getattr(self, hook_name, None)
+        field_type = self._types.get(name)
 
         used_value = value
-        if callable(hook):
+        if field_type is None:
+            log.debug("[Attr] %r is not a field (likely a method or hook). Skipping type check.", name)
+        elif is_optional(field_type) and value is None:
+            log.debug("[Hook] %r=%r allows None (Optional). Skipping check.", name, value)
+        elif callable(hook):
             result = hook(value)
 
             # Block assignment
             if result is False:
-                log.debug(f"[Hook] Assignment for '{key}' was blocked.")
+                log.debug("[Hook] Assignment for %r blocked by hook.", name)
                 return
 
             # If hook returns True or None => accept original
-            if result is True or result is None:
-                used_value = value
-                log.debug(f"[Hook] set {key} to {used_value!r}")
-            else:
-                # Any other return value is used as replacement
+            if result not in (True, None):
                 used_value = result
-                log.debug(f"[Hook] transformed {key}: {value!r} -> {used_value!r}")
+                log.debug("[Hook] %r transformed: %r -> %r", name, value, used_value)
+            else:
+                log.debug("[Hook] %r set to %r", name, used_value)
 
-        super().__setitem__(key, used_value)
+        super().__setattr__(name, used_value)
 
-    def set_option(self, option: _KT, value: _VT) -> None:
-        """Set an option."""
-        self[option] = value
+    def items(self) -> Iterable[tuple[str, _ValueType | None]]:
+        """
+        Yield all active option key–value pairs.
 
-    def _convert_attr(self, attr_name: str) -> str:
-        """Normalize attribute names for hook lookup."""
-        return attr_name.replace("-", "_")
+        Behavior:
+            - Converts field names to command-line–style keys by replacing underscores with dashes.
+            - Skips internal fields (those starting with an underscore) and unset fields (value is None).
+            - For presence-only flags (fields with metadata ``FLAG_METADATA_KEY``), yields the key with
+              a value of None when the flag is True, indicating that only its presence matters.
 
-    # Types
+        Returns:
+            Iterable[tuple[str, _ValueType | None]]:
+                An iterator of (option_name, value) pairs suitable for serialization or command-line output.
+        """
+        for f in fields(self):
+            option: str = f.name.replace("_", "-")
+            value: _ValueType | None = getattr(self, f.name, None)
+            if value is None or f.name.startswith("_"):
+                continue
+            if FLAG_METADATA_KEY in f.metadata and value is True:
+                yield option, None
+            else:
+                yield option, value
 
-    def _string(self, value: object) -> bool:
-        """Validate that value is a non-empty string."""
+    # Global-level validation hooks
+
+    @hook_for("track_name", "title")
+    def _validate_string(self, value: object) -> bool:
+        """Validate that given value is a non-empty string."""
         return isinstance(value, str) and len(value) > 0
 
-
-Trackeys = Literal[
-    "track-name",
-    "language",
-    "sync",
-    "tags",
-    "default-track",
-    "forced-track",
-    "hearing-impaired-flag",
-    "visual-impaired-flag",
-    "original-flag",
-    "commentary-flag",
-    "compression",
-    "no-track-tags",
-]
-"""Defines some available keys for track options."""
-
-
-class TrackOptions(OptionsDict[Trackeys, object]):
-    """
-    Options dictionary for track-level settings.
-
-    Hooks:
-        - `track-name`, `tags`:
-            Must be non-empty strings.
-        - `default-track`, `forced-track`, `hearing-impaired-flag`,
-          `visual-impaired-flag`, `original-flag`, `commentary-flag`,
-          `no-track-tags`:
-            Must be boolean flags.
-        - `sync`:
-            Must be an integer (e.g., sync delay in ms or frames).
-        - `compression`:
-            Must be one of the allowed values: "zlib", "none", "mpeg4_p2", "mpeg4p2".
-    """
-
-    @hook_for("track-name", "tags")
-    def _validate_string(self, value: object) -> bool:
-        """Validate that the value is a non-empty string."""
-        return self._string(value)
-
-    @hook_for(
-        "default-track",
-        "forced-track",
-        "hearing-impaired-flag",
-        "visual-impaired-flag",
-        "original-flag",
-        "commentary-flag",
-        "no-track-tags",
-    )
+    @hook_for("default_track", "forced_track", "no_track_tags", "webm")
     def _validate_flag(self, value: object) -> bool:
-        """Validate that the value is a boolean flag."""
+        """Validate that given value is a boolean flag."""
         return isinstance(value, bool)
 
     @hook_for("sync")
-    def _validate_sync(self, value: object) -> bool:
-        """Validate that the value is an integer."""
+    def _validate_integer(self, value: object) -> bool:
+        """Validate that given value is an integer."""
         return isinstance(value, int)
 
-    @hook_for("compression")
-    def _validate_compression(self, value: object) -> bool:
+
+@dataclass
+class TrackOptions(Options):
+    """Options for track-level settings."""
+
+    track_name: str | None = None
+    language: str | None = None
+    default_track: bool | None = None
+    forced_track: bool | None = None
+    no_track_tags: bool = PRESENCE_ONLY_FIELD
+    compression: Literal["zlib", "none", "mpeg4_p2", "mpeg4p2"] | None = None
+    sync: int | None = None
+
+    def _on_compression_set(self, value: str) -> bool:
         """Validate that the value is one of the allowed compression types."""
         return value in {"zlib", "none", "mpeg4_p2", "mpeg4p2"}
 
 
-GlobalKeys = Literal[
-    "title",
-    "disable-track-statistics-tags",
-    "default-language",
-    "webm",
-    "split",
-]
-"""Defines some available keys for global options."""
+@dataclass
+class GlobalOptions(Options):
+    """Options for global-level settings."""
 
-
-class GlobalOptions(OptionsDict[GlobalKeys, object]):
-    """
-    Options dictionary for global-level settings.
-
-    Hooks:
-        - `disable-track-statistics-tags`:
-            Must be a boolean flag.
-        - `title`:
-            Must be a non-empty string.
-    """
-
-    @hook_for("disable-track-statistics-tags")
-    def _validate_flag(self, value: object) -> bool:
-        """Validate that the flag is boolean."""
-        return isinstance(value, bool)
-
-    def _on_title_set(self, value: object) -> bool:
-        """Validate that title is a non-empty string."""
-        return self._string(value)
+    title: str | None = None
+    default_language: str | None = None
+    webm: bool = PRESENCE_ONLY_FIELD
