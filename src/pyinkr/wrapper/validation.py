@@ -102,23 +102,23 @@ class Options:
 
         used_value = value
         if field_type is None:
-            log.debug("[Attr] %r is not a field (likely a method or hook). Skipping type check.", name)
+            log.debug(f"[Attr] Attribute '{name}' is not defined as a field. Likely a method or hook. Skipping.")
         elif is_optional(field_type) and value is None:
-            log.debug("[Hook] %r=%r allows None (Optional). Skipping check.", name, value)
+            log.debug(f"[Hook] {name} allows None (Optional). Skipping check.")
         elif callable(hook):
             result = hook(value)
 
             # Block assignment
             if result is False:
-                log.debug("[Hook] Assignment for %r blocked by hook.", name)
+                log.debug(f"[Hook] Assignment for {name} blocked by hook.")
                 return
 
             # If hook returns True or None => accept original
             if result not in (True, None):
                 used_value = result
-                log.debug("[Hook] %r transformed: %r -> %r", name, value, used_value)
+                log.debug(f"[Hook] {name} transformed: {value} -> {used_value}")
             else:
-                log.debug("[Hook] %r set to %r", name, used_value)
+                log.debug(f"[Hook] {name} set to {used_value}")
 
         super().__setattr__(name, used_value)
 
