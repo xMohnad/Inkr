@@ -65,6 +65,7 @@ and view all available key bindings.
 ## Dependencies
 
 - [dacite](https://pypi.org/project/dacite/): A library for creating data classes from dictionaries.
+- [python-iso639](https://github.com/jacksonllee/iso639): Library for working with ISO 639 language codes.
 - [Textual](https://textual.textualize.io/): A Python framework for building terminal-based user interfaces.
 - [Textual-Fspicker](https://github.com/davep/textual-fspicker): A Textual widget library for picking things in the filesystem
 
