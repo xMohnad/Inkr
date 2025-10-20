@@ -18,9 +18,6 @@ if TYPE_CHECKING:
     from pyinkr.wrapper.mkvmerge import MkvMerge
 
 
-logging.basicConfig(level=logging.NOTSET, handlers=[TextualHandler()])
-
-
 class Inkr(App[None]):
     CSS_PATH: ClassVar[CSSPathType | None] = "style.tcss"
     SCREENS = {"Open": OpenScreen, "MkvManager": MkvManagScreen}  # pyright: ignore[reportUnannotatedClassAttribute]
@@ -39,6 +36,7 @@ class Inkr(App[None]):
 
     @work(exclusive=True)
     async def on_mount(self) -> None:
+        logging.basicConfig(level=logging.NOTSET, handlers=[TextualHandler()])
         self.manager, self.path = await self.push_screen_wait("Open")
         self.push_screen("MkvManager")
 
