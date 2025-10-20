@@ -165,6 +165,27 @@ class Options:
         """Validate that given value is an integer."""
         return isinstance(value, int)
 
+    @hook_for("language", "default_language")
+    def _validate_language(self, value: str) -> str:
+        """
+        Validates and normalizes a language code.
+
+        Checks if the provided language code or name corresponds to a valid ISO 639-2/B language code.
+        If recognized, returns the corresponding bibliographic code (part2b).
+        If not recognized, returns "und" (undefined), which is safe for use in MKVToolNix
+        or similar systems requiring a valid language code.
+
+        Returns:
+            str: The validated ISO 639-2/B code if known, or "und" if unknown.
+
+        Raises:
+            iso639.language.LanguageNotFoundError: If the provided code is not a recognized ISO 639 code
+        """
+        from iso639 import Language
+
+        lang = Language.match(value).part2b
+        return lang if lang else "und"
+
 
 @dataclass
 class TrackOptions(Options):
