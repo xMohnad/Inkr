@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, override
 
 from textual import on
 from textual.app import ComposeResult
@@ -10,8 +10,6 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Input
 
 if TYPE_CHECKING:
-    from typing import ClassVar, override
-
     from textual.binding import BindingType
 
 

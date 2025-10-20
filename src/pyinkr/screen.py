@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, override
 
-from pymkv import MKVFile
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -13,6 +12,7 @@ from textual.widgets import Checkbox, Footer, Header, TabbedContent, TabPane
 from textual_fspicker import FileOpen, FileSave
 
 from pyinkr.widgets import InfoTree, ListTrack, NoticeWidget
+from pyinkr.wrapper.mkvmerge import MkvMerge
 
 if TYPE_CHECKING:
     from textual.binding import BindingType
@@ -21,13 +21,13 @@ if TYPE_CHECKING:
     from pyinkr.main import Inkr
 
 
-class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
+class OpenScreen(Screen[tuple[MkvMerge, Path]]):
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("o", "open", "Open"),
         Binding("escape", "back", "Back", tooltip="Back To Opened MKV"),
     ]
 
-    path: reactive[Path] = reactive(Path(), init=False)
+    path: reactive[Path] = reactive(Path(), init=False, always_update=True)
     app: Inkr
     loading: Reactive[bool]
 
@@ -40,7 +40,7 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
     @work(exclusive=True, thread=True)
     async def watch_path(self, path: Path) -> None:
         try:
-            manager = MKVFile(path)
+            manager = MkvMerge(path)
             self.app.call_from_thread(self.dismiss, (manager, path))
         except Exception as e:
             self.app.call_from_thread(self.notify, str(e), severity="error")
@@ -101,7 +101,8 @@ class MkvManagScreen(Screen[None]):
                 if not checkbox.value:
                     self.app.manager.remove_track(i)
 
-            self.app.manager.mux(save_path)
+            self.app.manager.output = save_path
+            self.app.manager.mux()
 
     def action_toggle_overwrite(self) -> None:
         self.can_overwrite ^= True
