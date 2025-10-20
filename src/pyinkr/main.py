@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from textual import work
 from textual.app import App
+from textual.logging import TextualHandler
 
 from pyinkr.screen import MkvManagScreen, OpenScreen
 
@@ -14,6 +16,9 @@ if TYPE_CHECKING:
     from textual.types import CSSPathType
 
     from pyinkr.wrapper.mkvmerge import MkvMerge
+
+
+logging.basicConfig(level=logging.NOTSET, handlers=[TextualHandler()])
 
 
 class Inkr(App[None]):

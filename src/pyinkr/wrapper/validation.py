@@ -43,13 +43,13 @@ Example:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field, fields
 from functools import cached_property
 from typing import Callable, Final, Literal, TypeAlias, TypeVar, get_type_hints, override
 
 from dacite.types import is_optional
-from textual import log
 
 _ValueType: TypeAlias = bool | None | str | int
 _HookType: TypeAlias = Callable[..., _ValueType]
@@ -57,6 +57,8 @@ _F = TypeVar("_F", bound=_HookType)
 
 FLAG_METADATA_KEY: Final = "presence-only"
 PRESENCE_ONLY_FIELD: Final[bool] = field(default=False, metadata={FLAG_METADATA_KEY: True})
+
+logger = logging.getLogger(__name__)
 
 
 def hook_for(*fields: str) -> Callable[[_F], _F]:
@@ -102,23 +104,23 @@ class Options:
 
         used_value = value
         if field_type is None:
-            log.debug(f"[Attr] Attribute '{name}' is not defined as a field. Likely a method or hook. Skipping.")
+            logger.debug(f"[Attr] Attribute '{name}' is not defined as a field. Likely a method or hook. Skipping.")
         elif is_optional(field_type) and value is None:
-            log.debug(f"[Hook] {name} allows None (Optional). Skipping check.")
+            logger.debug(f"[Hook] {name} allows None (Optional). Skipping check.")
         elif callable(hook):
             result = hook(value)
 
             # Block assignment
             if result is False:
-                log.debug(f"[Hook] Assignment for {name} blocked by hook.")
+                logger.debug(f"[Hook] Assignment for {name} blocked by hook.")
                 return
 
             # If hook returns True or None => accept original
             if result not in (True, None):
                 used_value = result
-                log.debug(f"[Hook] {name} transformed: {value} -> {used_value}")
+                logger.debug(f"[Hook] {name} transformed: {value} -> {used_value}")
             else:
-                log.debug(f"[Hook] {name} set to {used_value}")
+                logger.debug(f"[Hook] {name} set to {used_value}")
 
         super().__setattr__(name, used_value)
 
