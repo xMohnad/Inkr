@@ -1,16 +1,16 @@
-lib      := pyinkr
-exec     := inkr
-src      := src/
-run      := uv run
-sync     := uv sync
-build    := uv build
-python   := $(run) python
-ptpython := $(run) ptpython
-ruff     := $(run) ruff
-lint     := $(ruff) check --select I
-fmt      := $(ruff) format
-mypy     := $(run) mypy
-spell    := $(run) codespell
+lib              := pyinkr
+exec             := inkr
+src              := src/
+run              := uv run
+sync             := uv sync
+build            := uv build
+python           := $(run) python
+ptpython         := $(run) ptpython
+ruff             := $(run) ruff
+lint             := $(ruff) check --select I
+fmt      				 := $(ruff) format
+basedpyright     := $(run) basedpyright
+spell    				 := $(run) codespell
 
 ##############################################################################
 # Local "interactive testing" of the code.
@@ -56,12 +56,8 @@ codestyle:			# Is the code formatted correctly?
 	$(fmt) --check $(src) 
 
 .PHONY: typecheck
-typecheck:			# Perform static type checks with mypy
-	$(mypy) --scripts-are-modules $(src)
-
-.PHONY: stricttypecheck
-stricttypecheck:	        # Perform a strict static type checks with mypy
-	$(mypy) --scripts-are-modules --strict $(src)
+typecheck:			# Perform static type checks with basedpyright
+	$(basedpyright) $(src)
 
 .PHONY: spellcheck
 spellcheck:			# Spell check the code
