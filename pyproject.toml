@@ -30,17 +30,13 @@ keywords = ["terminal"]
 Homepage = "https://github.com/xMohnad/Inkr"
 Repository = "https://github.com/xMohnad/Inkr"
 Issues = "https://github.com/xMohnad/Inkr/issues"
-Discussions = "https://github.com/xMohnad/Inkr/discussions"
 
 [tool.uv]
 managed = true
-dev-dependencies = [
-  "mypy>=1.14.1",
-  "codespell>=2.4.1",
-  "ruff>=0.12.9",
-  "ptpython>=3.0.0",
-  "textual-dev>=1.7.0",
-]
+
+[dependency-groups]
+lint = ["codespell>=2.4.1"]
+dev = ["textual-dev>=1.7.0"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -62,3 +58,4 @@ line-length = 120
 [tool.pyright]
 reportImportCycles = false
 reportUnusedCallResult = false
+typeCheckingMode = "basic"
