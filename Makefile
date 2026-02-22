@@ -1,16 +1,15 @@
 lib              := pyinkr
 exec             := inkr
 src              := src/
-run              := uv run
 sync             := uv sync
 build            := uv build
-python           := $(run) python
-ptpython         := $(run) ptpython
-ruff             := $(run) ruff
+python           := python
+ptpython         := ptpython
+ruff             := ruff
 lint             := $(ruff) check --select I
 fmt      				 := $(ruff) format
-basedpyright     := $(run) basedpyright
-spell    				 := $(run) codespell
+basedpyright     := basedpyright
+spell    				 := codespell
 
 ##############################################################################
 # Local "interactive testing" of the code.
@@ -24,11 +23,11 @@ debug:				# Run the code with Textual devtools enabled
 
 .PHONY: console
 console:			# Run the textual console
-	$(run) textual console
+	textual console
 
 .PHONY: dev
 dev: 					# Run in development mode with hot reload
-	textual run --dev -c "$(run) $(exec)"
+	textual run --dev -c "$(exec)"
 
 ##############################################################################
 # Setup/update packages the system requires.
@@ -80,7 +79,7 @@ spackage:			# Create a source package for the library
 # Utility.
 .PHONY: repl
 repl:				# Start a ptPython REPL in the venv.
-	$(run) $(ptpython)
+	$(ptpython)
 
 .PHONY: delint
 delint:			# Fix linting issues.
