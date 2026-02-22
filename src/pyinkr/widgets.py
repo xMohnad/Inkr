@@ -15,7 +15,7 @@ from textual_fspicker import FileOpen
 from pyinkr.dialogs import EditScreen
 
 if TYPE_CHECKING:
-    from pymkv import MKVTrack
+    from pymkv import MKVFile, MKVTrack
     from rich.console import RenderableType
     from textual.binding import BindingType
 
@@ -26,7 +26,6 @@ class ListTrack(ListView):
     """List of MKV tracks."""
 
     app: Inkr
-    index: int | None
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("a", "add_track", "Add"),
@@ -41,9 +40,8 @@ class ListTrack(ListView):
     @work(exclusive=True)
     async def on_mount(self) -> None:
         """Mount the tracks when the widget is mounted."""
-        self.tracks: list[MKVTrack] = self.app.manager.tracks
         async with self.batch():
-            await self.extend([self.list_item(track) for track in self.tracks])
+            await self.extend([self.list_item(track) for track in self.manager.tracks])
         self.index = 0
 
     @work(exclusive=True)
@@ -51,8 +49,8 @@ class ListTrack(ListView):
         """Add a new track to the MKV file."""
         if path := await self.app.push_screen_wait(FileOpen()):
             try:
-                self.app.manager.add_track(str(path))
-                track = self.list_item(self.tracks[-1])
+                self.manager.add_track(str(path))
+                track = self.list_item(self.manager.tracks[-1])
                 self.append(track)
             except Exception as e:
                 self.notify(f"Error adding track: {str(e)}", severity="error")
@@ -87,20 +85,19 @@ class ListTrack(ListView):
 
     def action_select(self) -> None:
         """Toggle selection state of the current track."""
-        if self.index is not None:
-            self.get_checkbox.toggle()
+        self.get_checkbox.toggle()
 
     async def action_move_up(self) -> None:
         """Move the selected track up."""
         if self.index is not None and self.index > 0:
-            self.app.manager.move_track_backward(self.index)
+            self.manager.move_track_backward(self.index)
             self.move_child(self.index, before=self.index - 1)
             self.index -= 1
 
     async def action_move_down(self) -> None:
         """Move the selected track down."""
-        if self.index is not None and self.index < len(self.tracks) - 1:
-            self.app.manager.move_track_forward(self.index)
+        if self.index is not None and self.index < len(self.manager.tracks) - 1:
+            self.manager.move_track_forward(self.index)
             self.move_child(self.index, after=self.index + 1)
             self.index += 1
 
@@ -119,13 +116,20 @@ class ListTrack(ListView):
 
     @property
     def get_checkbox(self) -> "Checkbox":
+        """Return the Checkbox widget for the current row."""
         assert self.index is not None
         return self.children[self.index].query_one(Checkbox)
 
     @property
     def get_track(self) -> "MKVTrack":
+        """Return the MKVTrack for the current row."""
         assert self.index is not None
-        return self.tracks[self.index]
+        return self.manager.tracks[self.index]
+
+    @property
+    def manager(self) -> MKVFile:
+        """Return the application's MKVFile manager."""
+        return self.app.manager
 
 
 class InfoTree(Tree[None]):
