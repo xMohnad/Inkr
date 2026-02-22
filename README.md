@@ -8,13 +8,13 @@ Inkr is a simple tool for managing MKV files.
 
 - **MKVToolNix**: Required for MKV operations. Install using your package manager:
 
-  | Platform | Command |
-  |----------|---------|
-  | **Arch Linux** | `sudo pacman -S mkvtoolnix-cli` |
-  | **Debian/Ubuntu** | `sudo apt install mkvtoolnix` |
-  | **macOS** (Homebrew) | `brew install mkvtoolnix` |
-  | **Termux** | `pkg install mkvtoolnix` |
-  | **Windows** | [Download installer](https://mkvtoolnix.download/downloads.html#windows) |
+  | Platform             | Command                                                                  |
+  | -------------------- | ------------------------------------------------------------------------ |
+  | **Arch Linux**       | `sudo pacman -S mkvtoolnix-cli`                                          |
+  | **Debian/Ubuntu**    | `sudo apt install mkvtoolnix`                                            |
+  | **macOS** (Homebrew) | `brew install mkvtoolnix`                                                |
+  | **Termux**           | `pkg install mkvtoolnix`                                                 |
+  | **Windows**          | [Download installer](https://mkvtoolnix.download/downloads.html#windows) |
 
 ### Install Inkr
 
@@ -24,7 +24,7 @@ Inkr is a simple tool for managing MKV files.
 pipx install pyinkr
 ```
 
-*Why pipx?*
+_Why pipx?_
 
 - Isolates the application in its own environment
 - Prevents dependency conflicts
