@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar, override
 
+from msgspec.structs import Struct, asdict
+from pymkv.models import MkvMergeOutput
 from rich.text import Text
 from textual import work
 from textual.binding import Binding
@@ -39,7 +41,7 @@ class ListTrack(ListView):
     @work(exclusive=True)
     async def on_mount(self) -> None:
         """Mount the tracks when the widget is mounted."""
-        self.tracks: list[MKVTrack] = self.app.manager.tracks  # pyright: ignore[reportUninitializedInstanceVariable]
+        self.tracks: list[MKVTrack] = self.app.manager.tracks
         async with self.batch():
             await self.extend([self.list_item(track) for track in self.tracks])
         self.index = 0
@@ -138,22 +140,35 @@ class InfoTree(Tree[None]):
     ]
 
     app: Inkr
-    info: reactive[dict[str, object] | None] = reactive(None, init=False)
+    info: reactive[MkvMergeOutput | None] = reactive(None, init=False)
 
     @override
     def on_mount(self) -> None:
         """Called when the component is mounted to the DOM."""
-        self.info = self.app.manager._info_json
 
-    async def watch_info(self, info: dict[str, object]) -> None:
+        if info := self.app.manager._info_json:
+            self.info = info
+
+    async def watch_info(self, info: MkvMergeOutput) -> None:
         """
         Reactive watcher for the `data` attribute.
 
         Args:
             data: The new data value that was set. Can be any decoded JSON structure.
         """
+
+        def struct_to_dict(obj: object) -> dict[str, object] | list[object] | object:
+            if isinstance(obj, Struct):
+                return {k: struct_to_dict(v) for k, v in asdict(obj).items()}
+            elif isinstance(obj, list):
+                return [struct_to_dict(i) for i in obj]
+            elif isinstance(obj, dict):
+                return {k: struct_to_dict(v) for k, v in obj.items()}
+            else:
+                return obj
+
         if info:
-            self.add_json(info)  # pyright: ignore[reportUnknownMemberType]
+            self.add_json(struct_to_dict(info))
 
     @work(exclusive=True)
     async def action_edit_title(self) -> None:
