@@ -56,3 +56,20 @@ NoticeWidget {
   content-align: center middle;
   color: $primary-lighten-3;
 }
+
+ProgressBarScreen {
+  align: center middle;
+
+  Container {
+    width: 95%;
+    height: 30%;
+    min-height: 10;
+
+    border: $border;
+    background: $panel;
+    border-title-color: $text;
+    border-title-background: $panel;
+    border-subtitle-color: $text;
+    border-subtitle-background: $error;
+  }
+}
