@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING, override
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal
+from textual.containers import Center, Container, Horizontal, Middle
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Header, Input
+from textual.widgets import Button, Footer, Header, Input, ProgressBar
 
 if TYPE_CHECKING:
     from typing import ClassVar
@@ -67,3 +67,55 @@ class EditScreen(ModalScreen[str | None]):
     def action_back(self) -> None:
         """Handles cancellation (button or escape key)."""
         self.dismiss(None)
+
+
+class ProgressBarScreen(ModalScreen[None]):
+    def __init__(
+        self,
+        title: str,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+    ) -> None:
+        """
+        Initialize the ProgressBarScreen.
+
+        Args:
+            title: The title to display at the top of the screen.
+            name: The name of the screen.
+            id: The ID of the screen.
+            classes: The CSS classes for the screen.
+        """
+        super().__init__(name=name, id=id, classes=classes)
+        self._title: str = title
+        self._total: float = 100.0
+
+    @override
+    def compose(self) -> ComposeResult:
+        """Compose the screen layout."""
+        yield Header()
+        with Container() as container:
+            container.border_title = self._title
+            with Center():
+                with Middle():
+                    yield ProgressBar(total=self._total)
+        yield Footer()
+
+    @property
+    def progress_bar(self) -> ProgressBar:
+        """Return the ProgressBar widget from the current screen."""
+        return self.query_one(ProgressBar)
+
+    def update(self, progress: int) -> None:
+        """Update the progress bar and close the screen when finished.
+
+        Args:
+            progress (int): Current progress value.
+
+        This method updates the ProgressBar widget with the given progress.
+        If the progress reaches or exceeds the total value, the screen
+        is dismissed automatically.
+        """
+        self.progress_bar.update(progress=progress)
+        if progress >= self._total:
+            self.dismiss(None)

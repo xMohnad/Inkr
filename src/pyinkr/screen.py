@@ -12,6 +12,7 @@ from textual.screen import Screen
 from textual.widgets import Checkbox, Footer, Header, TabbedContent, TabPane
 from textual_fspicker import FileOpen, FileSave
 
+from pyinkr.dialogs import ProgressBarScreen
 from pyinkr.widgets import InfoTree, ListTrack, NoticeWidget
 
 if TYPE_CHECKING:
@@ -62,7 +63,7 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
 
 class MkvManagScreen(Screen[None]):
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("s", "save", "Save"),
+        Binding("s", "save", "Save", show=False),
         Binding("w", "toggle_overwrite", "Overwrite video", False),
         Binding("escape", "back_to_open", "Back To Open Screen", False),
     ]
@@ -88,20 +89,40 @@ class MkvManagScreen(Screen[None]):
         if (focused := self.focused) and self.focused.id:
             focused_id = f"#{focused.id}"
         self.app.manager, self.app.path = await self.app.push_screen_wait("Open")
-        await self.recompose()
+        self.refresh(layout=True, recompose=True)
         self.query_one(focused_id).focus()
 
     @work(exclusive=True)
     async def action_save(self) -> None:
-        """Save edttin video"""
+        """Save editing video"""
         if save_path := await self.app.push_screen_wait(
             FileSave(default_file=self.app.path, can_overwrite=self.can_overwrite)
         ):
+            if save_path == self.app.path:
+                return self.notify("You can not overwrite original file", severity="error")
+
             for i, checkbox in enumerate(self.query_one(ListTrack).query(Checkbox)):
                 if not checkbox.value:
                     self.app.manager.remove_track(i)
 
-            self.app.manager.mux(save_path)
+            try:
+                self.app.push_screen(ProgressBarScreen("Saveing..."))
+                self._mux(save_path)
+            except Exception as e:
+                self.notify(str(e), severity="error")
+                screens = self.app.screen_stack
+                if screens and isinstance(screens[-1], ProgressBarScreen):
+                    self.app.pop_screen()
+
+    @work(exclusive=True, thread=True)
+    async def _mux(self, save_path: Path) -> None:
+        def update(progress: int) -> None:
+            screen = self.app.screen_stack[-1]
+            if isinstance(screen, ProgressBarScreen):
+                self.app.call_from_thread(screen.update, progress)
+
+        self.app.manager.mux(save_path, progress_handler=update)
+        self.app.call_from_thread(self.notify, "Saved successfully", severity="information")
 
     def action_toggle_overwrite(self) -> None:
         self.can_overwrite ^= True
