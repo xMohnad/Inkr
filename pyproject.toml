@@ -41,9 +41,8 @@ dev = ["textual-dev>=1.7.0"]
 [tool.hatch.metadata]
 allow-direct-references = true
 
-
 [build-system]
-requires = ["uv_build>=0.8.11,<0.9.0"]
+requires = ["uv_build>=0.11.30,<0.12"]
 build-backend = "uv_build"
 
 [tool.hatch.build.targets.wheel]
