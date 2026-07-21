@@ -70,13 +70,9 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
 class MkvManagScreen(Screen[None]):
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("s", "save", "Save"),
-        Binding("w", "toggle_overwrite", "Overwrite video", False),
         Binding("escape", "back_to_open", "Back To Open Screen", False),
     ]
     app: Inkr
-
-    can_overwrite: bool = False
-    """Flag to say if an existing file can be overwritten."""
 
     @override
     def compose(self) -> ComposeResult:
@@ -102,12 +98,7 @@ class MkvManagScreen(Screen[None]):
     @work(exclusive=True)
     async def action_save(self) -> None:
         """Save editing video"""
-        if save_path := await self.app.push_screen_wait(
-            FileSave(default_file=self.app.mkv.path, can_overwrite=self.can_overwrite)
-        ):
-            if save_path == self.app.mkv.path:
-                return self.notify("You can not overwrite original file", severity="error")
-
+        if save_path := await self.app.push_screen_wait(FileSave(default_file=self.app.mkv.path, can_overwrite=False)):
             for i, checkbox in enumerate(self.query_one(ListTrack).query(Checkbox)):
                 if not checkbox.value:
                     self.app.mkv.remove_track(i)
@@ -135,7 +126,3 @@ class MkvManagScreen(Screen[None]):
             title="Success",
             severity="information",
         )
-
-    def action_toggle_overwrite(self) -> None:
-        self.can_overwrite ^= True
-        self.notify(f"Overwrite: {self.can_overwrite}")
