@@ -85,6 +85,12 @@ class MkvManagScreen(Screen[None]):
                 yield ListTrack(id="track")
         yield Footer()
 
+    def on_mount(self) -> None:
+        self._refresh_title()
+
+    def _refresh_title(self) -> None:
+        self.sub_title = self.app.mkv.path.name
+
     @work(exclusive=True)
     async def action_back_to_open(self) -> None:
         focused_id = "#info"  # Default to info tab
@@ -93,6 +99,7 @@ class MkvManagScreen(Screen[None]):
         manager, path = await self.app.push_screen_wait("Open")
         self.app.mkv = MkvService(manager, path)
         self.refresh(layout=True, recompose=True)
+        self._refresh_title()
         self.query_one(focused_id).focus()
 
     @work(exclusive=True)
