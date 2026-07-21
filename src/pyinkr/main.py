@@ -6,11 +6,9 @@ from textual import work
 from textual.app import App
 
 from pyinkr.screen import MkvManagScreen, OpenScreen
+from pyinkr.services import MkvService
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
-    from pymkv import MKVFile
     from textual.types import CSSPathType
 
 
@@ -18,12 +16,12 @@ class Inkr(App[None]):
     CSS_PATH: ClassVar[CSSPathType | None] = "style.tcss"
     SCREENS = {"Open": OpenScreen, "MkvManager": MkvManagScreen}  # pyright: ignore[reportUnannotatedClassAttribute]
 
-    manager: MKVFile
-    path: Path
+    mkv: MkvService
 
     @work(exclusive=True)
     async def on_mount(self) -> None:
-        self.manager, self.path = await self.push_screen_wait("Open")
+        manager, path = await self.push_screen_wait("Open")
+        self.mkv = MkvService(manager, path)
         self.push_screen("MkvManager")
 
 

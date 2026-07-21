@@ -13,6 +13,7 @@ from textual.widgets import Checkbox, Footer, Header, TabbedContent, TabPane
 from textual_fspicker import FileOpen, FileSave
 
 from pyinkr.dialogs import ProgressBarScreen
+from pyinkr.services import MkvService
 from pyinkr.widgets import InfoTree, ListTrack, NoticeWidget
 
 if TYPE_CHECKING:
@@ -55,7 +56,7 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
             self.path = path
 
     async def action_back(self) -> None:
-        if hasattr(self.app, "manager"):
+        if hasattr(self.app, "mkv"):
             await self.run_action("app.back")
         else:
             self.notify("Open MKV First", severity="warning")
@@ -88,7 +89,8 @@ class MkvManagScreen(Screen[None]):
         focused_id = "#info"  # Default to info tab
         if (focused := self.focused) and self.focused.id:
             focused_id = f"#{focused.id}"
-        self.app.manager, self.app.path = await self.app.push_screen_wait("Open")
+        manager, path = await self.app.push_screen_wait("Open")
+        self.app.mkv = MkvService(manager, path)
         self.refresh(layout=True, recompose=True)
         self.query_one(focused_id).focus()
 
@@ -96,14 +98,14 @@ class MkvManagScreen(Screen[None]):
     async def action_save(self) -> None:
         """Save editing video"""
         if save_path := await self.app.push_screen_wait(
-            FileSave(default_file=self.app.path, can_overwrite=self.can_overwrite)
+            FileSave(default_file=self.app.mkv.path, can_overwrite=self.can_overwrite)
         ):
-            if save_path == self.app.path:
+            if save_path == self.app.mkv.path:
                 return self.notify("You can not overwrite original file", severity="error")
 
             for i, checkbox in enumerate(self.query_one(ListTrack).query(Checkbox)):
                 if not checkbox.value:
-                    self.app.manager.remove_track(i)
+                    self.app.mkv.remove_track(i)
 
             try:
                 self.app.push_screen(ProgressBarScreen("Saveing..."))
@@ -121,7 +123,7 @@ class MkvManagScreen(Screen[None]):
             if isinstance(screen, ProgressBarScreen):
                 self.app.call_from_thread(screen.update, progress)
 
-        self.app.manager.mux(save_path, progress_handler=update)
+        self.app.mkv.mux(save_path, progress_handler=update)
         self.app.call_from_thread(self.notify, "Saved successfully", severity="information")
 
     def action_toggle_overwrite(self) -> None:

@@ -12,14 +12,18 @@ from textual.widget import Widget
 from textual.widgets import Checkbox, ListItem, ListView, Tree
 from textual_fspicker import FileOpen
 
+from pyinkr.decorators import catch_errors
 from pyinkr.dialogs import EditScreen
 
 if TYPE_CHECKING:
-    from pymkv import MKVFile, MKVTrack
+    from typing import Callable
+
+    from pymkv import MKVTrack
     from rich.console import RenderableType
     from textual.binding import BindingType
 
     from pyinkr.main import Inkr
+    from pyinkr.services import MkvService
 
 
 class ListTrack(ListView):
@@ -41,19 +45,16 @@ class ListTrack(ListView):
     async def on_mount(self) -> None:
         """Mount the tracks when the widget is mounted."""
         async with self.batch():
-            await self.extend([self.list_item(track) for track in self.manager.tracks])
+            await self.extend([self.list_item(track) for track in self.mkv.tracks])
         self.index = 0
 
     @work(exclusive=True)
+    @catch_errors()
     async def action_add_track(self) -> None:
         """Add a new track to the MKV file."""
         if path := await self.app.push_screen_wait(FileOpen()):
-            try:
-                self.manager.add_track(str(path))
-                track = self.list_item(self.manager.tracks[-1])
-                self.append(track)
-            except Exception as e:
-                self.notify(f"Error adding track: {str(e)}", severity="error")
+            track = self.mkv.add_track(path)
+            self.append(self.list_item(track))
 
     async def action_toggle_default(self) -> None:
         """Set the selected track as default."""
@@ -64,24 +65,42 @@ class ListTrack(ListView):
     @work(exclusive=True)
     async def action_edit_name(self) -> None:
         """Edit the name of the selected track."""
-        track = self.get_track
-        if name := await self.app.push_screen_wait(EditScreen(track.track_name, "Edit Name", "Enter name...")):
-            try:
-                track.track_name = name
-                self.get_checkbox.label = self.formatted_text(track)
-            except Exception as e:
-                self.notify(f"Error: {str(e)}", severity="error")
+        await self._edit_track_field(
+            title="Edit Name", placeholder="Enter name...", get=lambda t: t.track_name, set=self._set_track_name
+        )
 
     @work(exclusive=True)
     async def action_edit_lang(self) -> None:
         """Edit the language of the selected MKV track."""
+        await self._edit_track_field(
+            title="Edit Language",
+            placeholder="Enter Language...",
+            get=lambda t: t.language,
+            set=self._set_track_lang,
+        )
+
+    @catch_errors()
+    async def _edit_track_field(
+        self,
+        *,
+        title: str,
+        placeholder: str,
+        get: "Callable[[MKVTrack], str | None]",
+        set: "Callable[[MKVTrack, str], None]",
+    ) -> None:
+        """Shared flow for editing a single string field on the selected track."""
         track = self.get_track
-        if lang := await self.app.push_screen_wait(EditScreen(track.language, "Edit Language", "Enter Language...")):
-            try:
-                track.language = lang
-                self.get_checkbox.label = self.formatted_text(track)
-            except Exception as e:
-                self.notify(f"Error: {str(e)}", severity="error")
+        if value := await self.app.push_screen_wait(EditScreen(get(track), title, placeholder)):
+            set(track, value)
+            self.get_checkbox.label = self.formatted_text(track)
+
+    @staticmethod
+    def _set_track_name(track: "MKVTrack", value: str) -> None:
+        track.track_name = value
+
+    @staticmethod
+    def _set_track_lang(track: "MKVTrack", value: str) -> None:
+        track.language = value
 
     def action_select(self) -> None:
         """Toggle selection state of the current track."""
@@ -90,14 +109,14 @@ class ListTrack(ListView):
     async def action_move_up(self) -> None:
         """Move the selected track up."""
         if self.index is not None and self.index > 0:
-            self.manager.move_track_backward(self.index)
+            self.mkv.move_track_up(self.index)
             self.move_child(self.index, before=self.index - 1)
             self.index -= 1
 
     async def action_move_down(self) -> None:
         """Move the selected track down."""
-        if self.index is not None and self.index < len(self.manager.tracks) - 1:
-            self.manager.move_track_forward(self.index)
+        if self.index is not None and self.index < len(self.mkv.tracks) - 1:
+            self.mkv.move_track_down(self.index)
             self.move_child(self.index, after=self.index + 1)
             self.index += 1
 
@@ -117,19 +136,21 @@ class ListTrack(ListView):
     @property
     def get_checkbox(self) -> "Checkbox":
         """Return the Checkbox widget for the current row."""
-        assert self.index is not None
+        if self.index is None:
+            raise ValueError("No track is currently selected.")
         return self.children[self.index].query_one(Checkbox)
 
     @property
     def get_track(self) -> "MKVTrack":
         """Return the MKVTrack for the current row."""
-        assert self.index is not None
-        return self.manager.tracks[self.index]
+        if self.index is None:
+            raise ValueError("No track is currently selected.")
+        return self.mkv.tracks[self.index]
 
     @property
-    def manager(self) -> MKVFile:
-        """Return the application's MKVFile manager."""
-        return self.app.manager
+    def mkv(self) -> "MkvService":
+        """Return the application's MKV service."""
+        return self.app.mkv
 
 
 class InfoTree(Tree[None]):
@@ -150,7 +171,7 @@ class InfoTree(Tree[None]):
     def on_mount(self) -> None:
         """Called when the component is mounted to the DOM."""
 
-        if info := self.app.manager._info_json:
+        if info := self.app.mkv.info_json:
             self.info = info
 
     async def watch_info(self, info: MkvMergeOutput) -> None:
@@ -175,16 +196,14 @@ class InfoTree(Tree[None]):
             self.add_json(struct_to_dict(info))
 
     @work(exclusive=True)
+    @catch_errors()
     async def action_edit_title(self) -> None:
         """Edit the title of MKV container."""
         if title := await self.app.push_screen_wait(
-            EditScreen(self.app.manager.title, "Edit MKV Title", "Enter New title...")
+            EditScreen(self.app.mkv.title, "Edit MKV Title", "Enter New title...")
         ):
-            try:
-                self.app.manager.title = title
-                self.notify(f"Title updated: {title}", severity="information")
-            except ValueError as e:
-                self.notify(str(e), severity="error")
+            self.app.mkv.title = title
+            self.notify(f"Title updated: {title}", severity="information")
 
 
 class NoticeWidget(Widget):
