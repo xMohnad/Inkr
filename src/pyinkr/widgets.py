@@ -48,13 +48,16 @@ class ListTrack(ListView):
             await self.extend([self.list_item(track) for track in self.mkv.tracks])
         self.index = 0
 
-    @work(exclusive=True)
+    @work(exclusive=True, thread=True)
     @catch_errors()
     async def action_add_track(self) -> None:
         """Add a new track to the MKV file."""
-        if path := await self.app.push_screen_wait(FileOpen()):
+        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
+            self.app.call_from_thread(setattr, self, "loading", True)
             track = self.mkv.add_track(path)
-            self.append(self.list_item(track))
+            self.app.call_from_thread(self.append, self.list_item(track))
+            self.app.call_from_thread(setattr, self, "loading", False)
+            self.app.call_from_thread(self.focus)
 
     async def action_toggle_default(self) -> None:
         """Set the selected track as default."""
