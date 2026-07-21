@@ -66,18 +66,28 @@ class ListTrack(ListView):
     async def action_edit_name(self) -> None:
         """Edit the name of the selected track."""
         await self._edit_track_field(
-            title="Edit Name", placeholder="Enter name...", get=lambda t: t.track_name, set=self._set_track_name
+            title=f"Edit Name — {self._track_label(self.get_track)}",
+            placeholder="Enter name...",
+            get=lambda t: t.track_name,
+            set=self._set_track_name,
         )
 
     @work(exclusive=True)
     async def action_edit_lang(self) -> None:
         """Edit the language of the selected MKV track."""
         await self._edit_track_field(
-            title="Edit Language",
+            title=f"Edit Language — {self._track_label(self.get_track)}",
             placeholder="Enter Language...",
             get=lambda t: t.language,
             set=self._set_track_lang,
         )
+
+    @staticmethod
+    def _track_label(track: "MKVTrack") -> str:
+        """A short human label used to identify a track in dialog titles."""
+        kind = (track.track_type or "track").capitalize()
+        name = track.track_name or "Unnamed"
+        return f"{kind}: {name.strip()}"
 
     @catch_errors()
     async def _edit_track_field(
@@ -122,12 +132,15 @@ class ListTrack(ListView):
 
     def formatted_text(self, track: "MKVTrack") -> Text:
         """Return formatted text for display in a Checkbox."""
-        details = f"{track.language or ''} {track.track_codec or ''} {track.track_type or ''}".strip()
-        default_indicator = " (Default)" if track.default_track else ""
-        return Text(details, style="bold") + Text(
-            f" {track.track_name or 'Unnamed'}{default_indicator}",
-            style="italic dim bold",
-        )
+        name = track.track_name or "Unnamed"
+        lang = track.language or "und"
+        codec = track.track_codec or "?"
+
+        text = Text(name, style="bold")
+        text += Text(f"  [{lang} · {codec}]", style="dim")
+        if track.default_track:
+            text += Text("  DEFAULT", style="bold green")
+        return text
 
     def list_item(self, track: "MKVTrack", value: bool = True) -> ListItem:
         """Return a ListItem representatiOn of the track."""
@@ -214,4 +227,4 @@ class NoticeWidget(Widget):
 
     @override
     def render(self) -> RenderableType:
-        return "Press [bold green]o[/] to open a file  ⍩⃝"
+        return "Press [bold green]o[/] to open a file"

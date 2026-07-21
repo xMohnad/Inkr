@@ -45,7 +45,12 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
             manager = MKVFile(path)
             self.app.call_from_thread(self.dismiss, (manager, path))
         except Exception as e:
-            self.app.call_from_thread(self.notify, str(e), severity="error")
+            self.app.call_from_thread(
+                self.notify,
+                f"Couldn't open '{path.name}': {e}",
+                title="Open failed",
+                severity="error",
+            )
         finally:
             self.app.call_from_thread(setattr, self, "loading", False)
 
@@ -64,7 +69,7 @@ class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
 
 class MkvManagScreen(Screen[None]):
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("s", "save", "Save", show=False),
+        Binding("s", "save", "Save"),
         Binding("w", "toggle_overwrite", "Overwrite video", False),
         Binding("escape", "back_to_open", "Back To Open Screen", False),
     ]
@@ -108,10 +113,10 @@ class MkvManagScreen(Screen[None]):
                     self.app.mkv.remove_track(i)
 
             try:
-                self.app.push_screen(ProgressBarScreen("Saveing..."))
+                self.app.push_screen(ProgressBarScreen(f"Saving {save_path.name}..."))
                 self._mux(save_path)
             except Exception as e:
-                self.notify(str(e), severity="error")
+                self.notify(f"Save failed: {e}", severity="error")
                 screens = self.app.screen_stack
                 if screens and isinstance(screens[-1], ProgressBarScreen):
                     self.app.pop_screen()
@@ -124,7 +129,12 @@ class MkvManagScreen(Screen[None]):
                 self.app.call_from_thread(screen.update, progress)
 
         self.app.mkv.mux(save_path, progress_handler=update)
-        self.app.call_from_thread(self.notify, "Saved successfully", severity="information")
+        self.app.call_from_thread(
+            self.notify,
+            f"Saved to {save_path.name}",
+            title="Success",
+            severity="information",
+        )
 
     def action_toggle_overwrite(self) -> None:
         self.can_overwrite ^= True
