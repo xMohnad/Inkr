@@ -81,7 +81,7 @@ class MkvManagScreen(Screen[None]):
         with TabbedContent(initial="info-tab", id="tabs"):
             with TabPane("Info", id="info-tab"):
                 yield InfoTree("INFO", id="info")
-            with TabPane("Track", id="track-tab"):
+            with TabPane("Tracks", id="track-tab"):
                 yield ListTrack(id="track")
         yield Footer()
 

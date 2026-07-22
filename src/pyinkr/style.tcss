@@ -1,13 +1,46 @@
+TabbedContent {
+  background: $surface;
+
+  Tabs {
+    padding: 0 1;
+    margin-top: 1;
+  }
+
+
+  Tab {
+    text-style: bold;
+    &:hover {
+      color: $text;
+    }
+
+    &.-active {
+      background: $surface;
+      color: $primary;
+    }
+  }
+}
+
 ListItem {
   height: auto;
+  border: round $panel-lighten-2;
+  background: $surface;
+  margin: 0 1 0 1;
+
   &.-highlight {
+    border: round $primary;
     color: $foreground;
   }
+
+  &:hover {
+    background: $panel-lighten-1;
+  }
+
   Checkbox {
+    padding: 1;
     width: 100%;
     height: auto;
+    border: none;
     &:focus {
-      border: none;
       & > .toggle--label {
         background: transparent;
       }
