@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from textual import work
 from textual.app import App
+from textual.reactive import Reactive
 
 from pyinkr.screen import MkvManagScreen, OpenScreen
 from pyinkr.services import MkvService
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
 class Inkr(App[None]):
     CSS_PATH: ClassVar[CSSPathType | None] = "style.tcss"
     SCREENS = {"Open": OpenScreen, "MkvManager": MkvManagScreen}  # pyright: ignore[reportUnannotatedClassAttribute]
+    theme: Reactive[str] = Reactive("tokyo-night")
 
     mkv: MkvService
 
