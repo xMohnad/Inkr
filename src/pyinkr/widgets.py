@@ -13,7 +13,7 @@ from textual.widgets import Checkbox, ListItem, ListView, Tree
 from textual_fspicker import FileOpen
 
 from pyinkr.decorators import catch_errors
-from pyinkr.dialogs import EditScreen
+from pyinkr.dialogs import DelayScreen, EditScreen
 
 if TYPE_CHECKING:
     from typing import Callable
@@ -35,6 +35,7 @@ class ListTrack(ListView):
         Binding("a", "add_track", "Add"),
         Binding("n", "edit_name", "Name"),
         Binding("l", "edit_lang", "Lang"),
+        Binding("y", "edit_delay", "Delay"),
         Binding("d", "toggle_default", "Toggle Default"),
         Binding("enter,space", "select", "Select", show=False),
         Binding("alt+up", "move_up", "Move Up", show=False),
@@ -84,6 +85,18 @@ class ListTrack(ListView):
             get=lambda t: t.language,
             set=self._set_track_lang,
         )
+
+    @work(exclusive=True)
+    @catch_errors()
+    async def action_edit_delay(self) -> None:
+        """Edit the synchronization delay of the selected track."""
+        track = self.get_track
+        result = await self.app.push_screen_wait(
+            DelayScreen(track.sync or 0, title=f"Delay — {self._track_label(track)}")
+        )
+        if result is not None:
+            track.sync = result or None
+            self.get_checkbox.label = self.formatted_text(track)
 
     @staticmethod
     def _track_label(track: "MKVTrack") -> str:
@@ -143,6 +156,9 @@ class ListTrack(ListView):
         text += Text(f"  [{lang} · {codec}]", style="dim")
         if track.default_track:
             text += Text("  DEFAULT", style="bold green")
+        if track.sync:
+            sign = "+" if track.sync > 0 else ""
+            text += Text(f"  ⏱ {sign}{track.sync / 1000:.2f}s", style="italic yellow")
         return text
 
     def list_item(self, track: "MKVTrack", value: bool = True) -> ListItem:
