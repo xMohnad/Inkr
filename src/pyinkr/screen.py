@@ -14,7 +14,7 @@ from textual_fspicker import FileOpen, FileSave
 
 from pyinkr.dialogs import ProgressBarScreen
 from pyinkr.services import MkvService
-from pyinkr.widgets import InfoTree, ListTrack, NoticeWidget
+from pyinkr.widgets import InfoTree, ListAttachment, ListTrack, NoticeWidget
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -79,12 +79,14 @@ class MkvManagScreen(Screen[None]):
     @override
     def compose(self) -> ComposeResult:
         yield Header()
-        # TODO: Add more tabs for chapters and attachments
+        # TODO: Add a tab for chapters
         with TabbedContent(initial="info-tab", id="tabs"):
             with TabPane("Info", id="info-tab"):
                 yield InfoTree("INFO", id="info")
             with TabPane("Tracks", id="track-tab"):
                 yield ListTrack(id="track")
+            with TabPane("Attachments", id="attachment-tab"):
+                yield ListAttachment(id="attachment")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -114,6 +116,9 @@ class MkvManagScreen(Screen[None]):
         if save_path := await self.app.push_screen_wait(FileSave(default_file=self.app.mkv.path, can_overwrite=False)):
             for i in self._indices_to_remove(self.query_one(ListTrack).query(Checkbox)):
                 self.app.mkv.remove_track(i)
+
+            for i in self._indices_to_remove(self.query_one(ListAttachment).query(Checkbox)):
+                self.app.mkv.remove_attachment(i)
 
             try:
                 self.app.push_screen(ProgressBarScreen(f"Saving {save_path.name}..."))

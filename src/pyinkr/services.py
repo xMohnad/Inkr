@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
-from pymkv import MKVFile, MKVTrack
+from pymkv import MKVAttachment, MKVFile, MKVTrack
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -52,6 +52,20 @@ class MkvService:
 
     def move_track_down(self, index: int) -> None:
         self.manager.move_track_forward(index)
+
+    @property
+    def attachments(self) -> list[MKVAttachment]:
+        """All attachments currently in the container."""
+        return self.manager.attachments
+
+    def add_attachment(self, path: Path) -> MKVAttachment:
+        """Add an attachment from `path` and return it."""
+        attachment = MKVAttachment(str(path), name=path.name)
+        self.manager.add_attachment(attachment)
+        return attachment
+
+    def remove_attachment(self, index: int) -> None:
+        self.manager.remove_attachment(index)
 
     def mux(self, save_path: Path, progress_handler: Callable[[int], None]) -> None:
         self.manager.mux(save_path, progress_handler=progress_handler)

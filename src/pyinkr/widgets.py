@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, override
 
 from msgspec.structs import Struct, asdict
@@ -18,7 +19,7 @@ from pyinkr.dialogs import DelayScreen, EditScreen
 if TYPE_CHECKING:
     from typing import Callable
 
-    from pymkv import MKVTrack
+    from pymkv import MKVAttachment, MKVTrack
     from rich.console import RenderableType
     from textual.binding import BindingType
 
@@ -128,7 +129,8 @@ class ListTrack(ListView):
     def _set_track_lang(track: "MKVTrack", value: str) -> None:
         track.language = value
 
-    def action_select(self) -> None:
+    @catch_errors()
+    async def action_select(self) -> None:
         """Toggle selection state of the current track."""
         self.get_checkbox.toggle()
 
@@ -162,7 +164,7 @@ class ListTrack(ListView):
         return text
 
     def list_item(self, track: "MKVTrack", value: bool = True) -> ListItem:
-        """Return a ListItem representatiOn of the track."""
+        """Return a ListItem representation of the track."""
         return ListItem(Checkbox(self.formatted_text(track), value))
 
     @property
@@ -178,6 +180,122 @@ class ListTrack(ListView):
         if self.index is None:
             raise ValueError("No track is currently selected.")
         return self.mkv.tracks[self.index]
+
+    @property
+    def mkv(self) -> "MkvService":
+        """Return the application's MKV service."""
+        return self.app.mkv
+
+
+class ListAttachment(ListView):
+    """List of MKV attachments."""
+
+    app: Inkr
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("a", "add_attachment", "Add"),
+        Binding("n", "edit_name", "Name"),
+        Binding("e", "edit_description", "Description"),
+        Binding("enter,space", "select", "Select", show=False),
+    ]
+
+    @work(exclusive=True)
+    async def on_mount(self) -> None:
+        """Load attachments when mounted."""
+        async with self.batch():
+            await self.extend([self.list_item(attachment) for attachment in self.mkv.attachments])
+        self.index = 0
+
+    @work(exclusive=True, thread=True)
+    @catch_errors()
+    async def action_add_attachment(self) -> None:
+        """Add a new attachment from a file."""
+        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
+            attachment = self.mkv.add_attachment(path)
+            self.app.call_from_thread(self.append, self.list_item(attachment))
+            self.app.call_from_thread(self.focus)
+
+    @catch_errors()
+    async def action_select(self) -> None:
+        """Toggle the selected attachment."""
+        self.get_checkbox.toggle()
+
+    @work(exclusive=True)
+    async def action_edit_name(self) -> None:
+        """Edit the attachment name."""
+        await self._edit_attachment_field(
+            title=f"Edit Name — {self._attachment_label(self.get_attachment)}",
+            placeholder="Enter name...",
+            get=lambda a: a.name,
+            set=self._set_attachment_name,
+        )
+
+    @work(exclusive=True)
+    async def action_edit_description(self) -> None:
+        """Edit the attachment description."""
+        await self._edit_attachment_field(
+            title=f"Edit Description — {self._attachment_label(self.get_attachment)}",
+            placeholder="Enter description...",
+            get=lambda a: a.description,
+            set=self._set_attachment_description,
+        )
+
+    @staticmethod
+    def _attachment_label(attachment: "MKVAttachment") -> str:
+        """A short human label used to identify an attachment in dialog titles."""
+        return attachment.name or Path(attachment.file_path).name
+
+    @catch_errors()
+    async def _edit_attachment_field(
+        self,
+        *,
+        title: str,
+        placeholder: str,
+        get: "Callable[[MKVAttachment], str | None]",
+        set: "Callable[[MKVAttachment, str], None]",
+    ) -> None:
+        """Shared flow for editing a single string field on the selected attachment."""
+        attachment = self.get_attachment
+        if value := await self.app.push_screen_wait(EditScreen(get(attachment), title, placeholder)):
+            set(attachment, value)
+            self.get_checkbox.label = self.formatted_text(attachment)
+
+    @staticmethod
+    def _set_attachment_name(attachment: "MKVAttachment", value: str) -> None:
+        attachment.name = value
+
+    @staticmethod
+    def _set_attachment_description(attachment: "MKVAttachment", value: str) -> None:
+        attachment.description = value
+
+    def formatted_text(self, attachment: "MKVAttachment") -> Text:
+        """Return formatted text for display in the list."""
+        name = self._attachment_label(attachment)
+        mime = attachment.mime_type or "?"
+
+        text = Text(name, style="bold")
+        text += Text(f"  [{mime}]", style="dim")
+        if attachment.description:
+            text += Text(f"  — {attachment.description}", style="italic")
+        return text
+
+    def list_item(self, attachment: "MKVAttachment", value: bool = True) -> ListItem:
+        """Return a ListItem representation of the attachment."""
+        return ListItem(Checkbox(self.formatted_text(attachment), value))
+
+    @property
+    def get_checkbox(self) -> "Checkbox":
+        """Return the Checkbox widget for the currently selected track."""
+        if self.index is None:
+            raise ValueError("No attachment is currently selected.")
+        return self.children[self.index].query_one(Checkbox)
+
+    @property
+    def get_attachment(self) -> "MKVAttachment":
+        """Return the currently selected attachment."""
+        if self.index is None:
+            raise ValueError("No attachment is currently selected.")
+        return self.mkv.attachments[self.index]
 
     @property
     def mkv(self) -> "MkvService":
