@@ -17,6 +17,8 @@ from pyinkr.services import MkvService
 from pyinkr.widgets import InfoTree, ListTrack, NoticeWidget
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from textual.binding import BindingType
     from textual.reactive import Reactive
 
@@ -102,13 +104,16 @@ class MkvManagScreen(Screen[None]):
         self._refresh_title()
         self.query_one(focused_id).focus()
 
+    @staticmethod
+    def _indices_to_remove(checkboxes: Iterable[Checkbox]) -> list[int]:
+        return [i for i, cb in enumerate(checkboxes) if not cb.value][::-1]
+
     @work(exclusive=True)
     async def action_save(self) -> None:
         """Save editing video"""
         if save_path := await self.app.push_screen_wait(FileSave(default_file=self.app.mkv.path, can_overwrite=False)):
-            for i, checkbox in enumerate(self.query_one(ListTrack).query(Checkbox)):
-                if not checkbox.value:
-                    self.app.mkv.remove_track(i)
+            for i in self._indices_to_remove(self.query_one(ListTrack).query(Checkbox)):
+                self.app.mkv.remove_track(i)
 
             try:
                 self.app.push_screen(ProgressBarScreen(f"Saving {save_path.name}..."))
