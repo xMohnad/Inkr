@@ -1,15 +1,6 @@
 lib              := pyinkr
 exec             := inkr
 src              := src/
-sync             := uv sync
-build            := uv build
-python           := python
-ptpython         := ptpython
-ruff             := ruff
-lint             := $(ruff) check --select I
-fmt      				 := $(ruff) format
-basedpyright     := basedpyright
-spell    				 := codespell
 
 ##############################################################################
 # Local "interactive testing" of the code.
@@ -34,11 +25,11 @@ dev: 					# Run in development mode with hot reload
 .PHONY: setup
 setup:				# Set up the repository for development
 	uv venv --allow-existing
-	$(sync)
+	uv sync
 
 .PHONY: update
 update:				# Update all dependencies
-	$(sync) --upgrade
+	uv sync --upgrade
 
 .PHONY: resetup
 resetup: realclean		# Recreate the virtual environment from scratch
@@ -48,32 +39,32 @@ resetup: realclean		# Recreate the virtual environment from scratch
 # Checking/testing/linting/etc.
 .PHONY: lint
 lint:				# Check the code for linting issues
-	$(lint) $(src) 
+	ruff check $(src)
 
 .PHONY: codestyle
 codestyle:			# Is the code formatted correctly?
-	$(fmt) --check $(src) 
+	ruff format --check $(src)
 
 .PHONY: typecheck
 typecheck:			# Perform static type checks with basedpyright
-	$(basedpyright) $(src)
+	basedpyright $(src)
 
 .PHONY: spellcheck
 spellcheck:			# Spell check the code
-	$(spell) *.md $(src) 
+	 codespell *.md $(src)
 
 .PHONY: checkall
-checkall: spellcheck codestyle lint # Check all the things
+checkall: spellcheck codestyle lint typecheck # Check all the things
 
 ##############################################################################
 # Package
 .PHONY: package
 package:			# Package the library
-	$(build)
+	uv build
 
 .PHONY: spackage
 spackage:			# Create a source package for the library
-	$(build) --sdist
+	uv build --sdist
 
 ##############################################################################
 # Utility.
@@ -83,18 +74,18 @@ repl:				# Start a ptPython REPL in the venv.
 
 .PHONY: delint
 delint:			# Fix linting issues.
-	$(lint) --fix $(src)
+	ruff check --fix $(src)
 
 .PHONY: pep8ify
 pep8ify:			# Reformat the code to be as PEP8 as possible.
-	$(fmt) $(src) 
+	ruff format $(src)
 
 .PHONY: tidy
 tidy: delint pep8ify		# Tidy up the code, fixing lint and format issues.
 
 .PHONY: clean
 clean:		# Clean the package building files
-	rm -rf dist/ build/ $(src)*.egg-info .pytest_cache 
+	rm -rf dist/ build/ $(src)*.egg-info .pytest_cache
 	find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete
 
