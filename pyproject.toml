@@ -4,7 +4,12 @@ version = "0.2.0"
 description = "A tool for managing MKV files"
 authors = [{ name = "xMohnad" }]
 
-dependencies = ["pymkv2>=2.1.1", "textual>=2.1.2", "textual_fspicker>=0.4.1"]
+dependencies = [
+  "pymkv2>=2.1.1",
+  "textual>=2.1.2",
+  "textual_fspicker>=0.4.1",
+  "typing_extensions>=4.12.0",
+]
 
 readme = "README.md"
 license = "MIT"
@@ -54,7 +59,32 @@ inkr = "pyinkr.main:main"
 [tool.ruff]
 line-length = 120
 
+[tool.ruff.lint]
+# D1xx: missing-docstring rules. D100 (missing docstring in public module)
+# is intentionally excluded — module-level docstrings aren't required.
+# Private names (leading underscore) are excluded by pydocstyle by
+# default, matching this project's convention that internal helper
+# methods don't require docstrings.
+# D401: docstrings should start with an imperative verb ("Return the...",
+# not "Returns the...").
+select = [
+  "D101",
+  "D102",
+  "D103",
+  "D104",
+  "D105",
+  "D106",
+  "D107",
+  "D401",
+  "D419",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.pyright]
-reportImportCycles = false
-reportUnusedCallResult = false
-typeCheckingMode = "basic"
+reportImplicitOverride = true
+deprecateTypingAliases = true
+reportMissingTypeArgument = true
+reportMissingParameterType = "warning"
+typeCheckingMode = "standard"

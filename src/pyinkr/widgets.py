@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, override
+from typing import TYPE_CHECKING, ClassVar
 
 from msgspec.structs import Struct, asdict
 from pymkv.models import MkvMergeOutput
@@ -12,6 +12,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Checkbox, ListItem, ListView, Tree
 from textual_fspicker import FileOpen
+from typing_extensions import override
 
 from pyinkr.decorators import catch_errors
 from pyinkr.dialogs import DelayScreen, EditScreen
@@ -44,8 +45,9 @@ class ListTrack(ListView):
     ]
 
     @work(exclusive=True)
+    @override
     async def on_mount(self) -> None:
-        """Mount the tracks when the widget is mounted."""
+        """Load tracks when mounted."""
         async with self.batch():
             await self.extend([self.list_item(track) for track in self.mkv.tracks])
         self.index = 0
@@ -53,7 +55,7 @@ class ListTrack(ListView):
     @work(exclusive=True, thread=True)
     @catch_errors()
     async def action_add_track(self) -> None:
-        """Add a new track to the MKV file."""
+        """Add a new track from a file."""
         if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
             self.app.call_from_thread(setattr, self, "loading", True)
             track = self.mkv.add_track(path)
@@ -62,14 +64,14 @@ class ListTrack(ListView):
             self.app.call_from_thread(self.focus)
 
     async def action_toggle_default(self) -> None:
-        """Set the selected track as default."""
+        """Toggle the default flag on the selected track."""
         track = self.get_track
         track.default_track = not track.default_track
         self.get_checkbox.label = self.formatted_text(track)
 
     @work(exclusive=True)
     async def action_edit_name(self) -> None:
-        """Edit the name of the selected track."""
+        """Edit the track name."""
         await self._edit_track_field(
             title=f"Edit Name — {self._track_label(self.get_track)}",
             placeholder="Enter name...",
@@ -79,10 +81,10 @@ class ListTrack(ListView):
 
     @work(exclusive=True)
     async def action_edit_lang(self) -> None:
-        """Edit the language of the selected MKV track."""
+        """Edit the track language."""
         await self._edit_track_field(
             title=f"Edit Language — {self._track_label(self.get_track)}",
-            placeholder="Enter Language...",
+            placeholder="Enter language...",
             get=lambda t: t.language,
             set=self._set_track_lang,
         )
@@ -90,7 +92,7 @@ class ListTrack(ListView):
     @work(exclusive=True)
     @catch_errors()
     async def action_edit_delay(self) -> None:
-        """Edit the synchronization delay of the selected track."""
+        """Edit the track sync delay."""
         track = self.get_track
         result = await self.app.push_screen_wait(
             DelayScreen(track.sync or 0, title=f"Delay — {self._track_label(track)}")
@@ -101,7 +103,7 @@ class ListTrack(ListView):
 
     @staticmethod
     def _track_label(track: "MKVTrack") -> str:
-        """A short human label used to identify a track in dialog titles."""
+        """Build a short human label used to identify a track in dialog titles."""
         kind = (track.track_type or "track").capitalize()
         name = track.track_name or "Unnamed"
         return f"{kind}: {name.strip()}"
@@ -169,14 +171,14 @@ class ListTrack(ListView):
 
     @property
     def get_checkbox(self) -> "Checkbox":
-        """Return the Checkbox widget for the current row."""
+        """Return the Checkbox widget for the currently selected track."""
         if self.index is None:
             raise ValueError("No track is currently selected.")
         return self.children[self.index].query_one(Checkbox)
 
     @property
     def get_track(self) -> "MKVTrack":
-        """Return the MKVTrack for the current row."""
+        """Return the currently selected track."""
         if self.index is None:
             raise ValueError("No track is currently selected.")
         return self.mkv.tracks[self.index]
@@ -200,6 +202,7 @@ class ListAttachment(ListView):
     ]
 
     @work(exclusive=True)
+    @override
     async def on_mount(self) -> None:
         """Load attachments when mounted."""
         async with self.batch():
@@ -242,7 +245,7 @@ class ListAttachment(ListView):
 
     @staticmethod
     def _attachment_label(attachment: "MKVAttachment") -> str:
-        """A short human label used to identify an attachment in dialog titles."""
+        """Build a short human label used to identify an attachment in dialog titles."""
         return attachment.name or Path(attachment.file_path).name
 
     @catch_errors()
@@ -285,7 +288,7 @@ class ListAttachment(ListView):
 
     @property
     def get_checkbox(self) -> "Checkbox":
-        """Return the Checkbox widget for the currently selected track."""
+        """Return the Checkbox widget for the currently selected attachment."""
         if self.index is None:
             raise ValueError("No attachment is currently selected.")
         return self.children[self.index].query_one(Checkbox)
@@ -319,20 +322,15 @@ class InfoTree(Tree[None]):
 
     @override
     def on_mount(self) -> None:
-        """Called when the component is mounted to the DOM."""
-
+        """Initialize the tree when mounted."""
         if info := self.app.mkv.info_json:
             self.info = info
 
-    async def watch_info(self, info: MkvMergeOutput) -> None:
-        """
-        Reactive watcher for the `data` attribute.
-
-        Args:
-            data: The new data value that was set. Can be any decoded JSON structure.
-        """
+    async def watch_info(self, info: MkvMergeOutput | None) -> None:
+        """Update the tree when info changes."""
 
         def struct_to_dict(obj: object) -> dict[str, object] | list[object] | object:
+            """Convert msgspec Struct objects to nested dictionaries."""
             if isinstance(obj, Struct):
                 return {k: struct_to_dict(v) for k, v in asdict(obj).items()}
             elif isinstance(obj, list):
@@ -348,20 +346,22 @@ class InfoTree(Tree[None]):
     @work(exclusive=True)
     @catch_errors()
     async def action_edit_title(self) -> None:
-        """Edit the title of MKV container."""
+        """Edit the MKV container title."""
         if title := await self.app.push_screen_wait(
-            EditScreen(self.app.mkv.title, "Edit MKV Title", "Enter New title...")
+            EditScreen(self.app.mkv.title, "Edit MKV Title", "Enter new title...")
         ):
             self.app.mkv.title = title
-            self.notify(f"Title updated: {title}", severity="information")
+            self.notify(f"Title updated: {title}", title="Title Updated", severity="information")
 
 
 class NoticeWidget(Widget):
+    """A widget that displays notices."""
+
     can_focus: bool = True
     """Widget may receive focus."""
     can_focus_children: bool = False
     """Widget's children may receive focus."""
 
     @override
-    def render(self) -> RenderableType:
+    def render(self) -> RenderableType:  # noqa: D102 (pure yield/return, no non-obvious behavior)
         return "Press [bold green]o[/] to open a file"

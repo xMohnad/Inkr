@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING
 
 from textual import on
 from textual.app import ComposeResult
@@ -8,6 +8,7 @@ from textual.binding import Binding
 from textual.containers import Center, Container, Horizontal, Middle
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Input, ProgressBar
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from typing import ClassVar
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class EditScreen(ModalScreen[str | None]):
-    """A modal screen for editing information"""
+    """A modal screen for editing information."""
 
     BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "back", "Back")]
 
@@ -29,25 +30,14 @@ class EditScreen(ModalScreen[str | None]):
         id: str | None = None,
         classes: str | None = None,
     ) -> None:
-        """
-        Initialize the EditScreen.
-
-        Args:
-            value: The initial value for the input field.
-            title: The title to display at the top of the screen.
-            placeholder: Optional placeholder text for the input.
-            name: The name of the screen.
-            id: The ID of the screen.
-            classes: The CSS classes for the screen.
-        """
+        """Initialize the EditScreen with the given value, title, and placeholder."""
         super().__init__(name=name, id=id, classes=classes)
         self._value: str = value or ""
         self._title: str = title
         self._placeholder: str = placeholder
 
     @override
-    def compose(self) -> ComposeResult:
-        """Compose the screen layout."""
+    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
         yield Header()
         with Container() as container:
             container.border_title = self._title
@@ -65,7 +55,7 @@ class EditScreen(ModalScreen[str | None]):
 
     @on(Button.Pressed, "#cancel-btn")
     def action_back(self) -> None:
-        """Handles cancellation (button or escape key)."""
+        """Handle cancellation (button or escape key)."""
         self.dismiss(None)
 
 
@@ -95,23 +85,13 @@ class DelayScreen(ModalScreen[int | None]):
         id: str | None = None,
         classes: str | None = None,
     ) -> None:
-        """
-        Initialize the DelayScreen.
-
-        Args:
-            delay_ms: The current delay in milliseconds.
-            title: The title to display at the top of the screen.
-            name: The name of the screen.
-            id: The ID of the screen.
-            classes: The CSS classes for the screen.
-        """
+        """Initialize the DelayScreen with the given delay (in milliseconds) and title."""
         super().__init__(name=name, id=id, classes=classes)
         self._delay_ms: int = delay_ms
         self._title: str = title
 
     @override
-    def compose(self) -> ComposeResult:
-        """Compose the screen layout."""
+    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
         yield Header()
         with Container() as container:
             container.border_title = self._title
@@ -138,6 +118,7 @@ class DelayScreen(ModalScreen[int | None]):
             return self._delay_ms
 
     def _set_ms(self, delay_ms: int) -> None:
+        """Set the delay and refresh the input field."""
         self._delay_ms = delay_ms
         self.query_one("#delay-input", Input).value = self._format(delay_ms)
 
@@ -168,6 +149,8 @@ class DelayScreen(ModalScreen[int | None]):
 
 
 class ProgressBarScreen(ModalScreen[None]):
+    """A modal screen showing progress for a long-running operation."""
+
     def __init__(
         self,
         title: str,
@@ -175,22 +158,13 @@ class ProgressBarScreen(ModalScreen[None]):
         id: str | None = None,
         classes: str | None = None,
     ) -> None:
-        """
-        Initialize the ProgressBarScreen.
-
-        Args:
-            title: The title to display at the top of the screen.
-            name: The name of the screen.
-            id: The ID of the screen.
-            classes: The CSS classes for the screen.
-        """
+        """Initialize the ProgressBarScreen with the given title."""
         super().__init__(name=name, id=id, classes=classes)
         self._title: str = title
         self._total: float = 100.0
 
     @override
-    def compose(self) -> ComposeResult:
-        """Compose the screen layout."""
+    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
         yield Header()
         with Container() as container:
             container.border_title = self._title
@@ -205,15 +179,7 @@ class ProgressBarScreen(ModalScreen[None]):
         return self.query_one(ProgressBar)
 
     def update(self, progress: int) -> None:
-        """Update the progress bar and close the screen when finished.
-
-        Args:
-            progress (int): Current progress value.
-
-        This method updates the ProgressBar widget with the given progress.
-        If the progress reaches or exceeds the total value, the screen
-        is dismissed automatically.
-        """
+        """Update the progress bar, dismissing the screen once `progress` reaches the total."""
         self.progress_bar.update(progress=progress)
         if progress >= self._total:
             self.dismiss(None)
