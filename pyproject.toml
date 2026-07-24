@@ -77,6 +77,7 @@ select = [
   "D107",
   "D401",
   "D419",
+  "I",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -86,5 +87,7 @@ convention = "google"
 reportImplicitOverride = true
 deprecateTypingAliases = true
 reportMissingTypeArgument = true
+reportUnusedCallResult = false
+reportImportCycles = false
 reportMissingParameterType = "warning"
 typeCheckingMode = "standard"

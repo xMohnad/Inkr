@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, ClassVar
 from textual import work
 from textual.app import App
 from textual.reactive import Reactive
-from typing_extensions import override
 
 from pyinkr.screen import MkvManagScreen, OpenScreen
 from pyinkr.services import MkvService
@@ -18,18 +17,16 @@ class Inkr(App[None]):
     """The application entry point: opens an MKV file, then manages it."""
 
     CSS_PATH: ClassVar[CSSPathType | None] = "style.tcss"
-    SCREENS = {"Open": OpenScreen, "MkvManager": MkvManagScreen}  # pyright: ignore[reportUnannotatedClassAttribute]
     theme: Reactive[str] = Reactive("tokyo-night")
 
-    mkv: MkvService
+    mkv: MkvService  # pyright: ignore[reportUninitializedInstanceVariable]
 
     @work(exclusive=True)
-    @override
     async def on_mount(self) -> None:
         """Prompt for an MKV file to open, then show the manager screen."""
-        manager, path = await self.push_screen_wait("Open")
+        manager, path = await self.push_screen_wait(OpenScreen())
         self.mkv = MkvService(manager, path)
-        self.push_screen("MkvManager")
+        self.push_screen(MkvManagScreen())
 
 
 def main() -> None:

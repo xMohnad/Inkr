@@ -50,7 +50,7 @@ class ListTrack(ListView):
         """Load tracks when mounted."""
         async with self.batch():
             await self.extend([self.list_item(track) for track in self.mkv.tracks])
-        self.index = 0
+        self.index: int = 0
 
     @work(exclusive=True, thread=True)
     @catch_errors()
@@ -207,7 +207,7 @@ class ListAttachment(ListView):
         """Load attachments when mounted."""
         async with self.batch():
             await self.extend([self.list_item(attachment) for attachment in self.mkv.attachments])
-        self.index = 0
+        self.index: int | None = 0
 
     @work(exclusive=True, thread=True)
     @catch_errors()

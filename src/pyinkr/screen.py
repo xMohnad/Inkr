@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from pyinkr.main import Inkr
 
 
-class OpenScreen(Screen[tuple[type[MKVFile], type[Path]]]):
+class OpenScreen(Screen[tuple[MKVFile, Path]]):
     """Screen for selecting and opening an MKV file."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -111,7 +111,8 @@ class MkvManagScreen(Screen[None]):
         focused_id = "#info"  # Default to info tab
         if (focused := self.focused) and self.focused.id:
             focused_id = f"#{focused.id}"
-        manager, path = await self.app.push_screen_wait("Open")
+
+        manager, path = await self.app.push_screen_wait(OpenScreen())
         self.app.mkv = MkvService(manager, path)
         self.refresh(layout=True, recompose=True)
         self._refresh_title()

@@ -35,7 +35,7 @@ class MkvService:
     @property
     def info_json(self) -> MkvMergeOutput | None:
         """Cached `mkvmerge -J` output for the container, if available."""
-        return self.manager._info_json
+        return self.manager._info_json  # pyright: ignore[reportPrivateUsage]
 
     def add_track(self, path: Path) -> MKVTrack:
         """Add a track from `path` and return it."""
