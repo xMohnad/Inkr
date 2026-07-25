@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class EditScreen(ModalScreen[str | None]):
     """A modal screen for editing information."""
 
-    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "back", "Back")]
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "cancel", "Cancel")]
 
     def __init__(
         self,
@@ -54,7 +54,7 @@ class EditScreen(ModalScreen[str | None]):
         self.dismiss(self.query_one("#edit-input", Input).value.strip())
 
     @on(Button.Pressed, "#cancel-btn")
-    def action_back(self) -> None:
+    def action_cancel(self) -> None:
         """Handle cancellation (button or escape key)."""
         self.dismiss(None)
 
