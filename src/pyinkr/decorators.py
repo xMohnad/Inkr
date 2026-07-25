@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
 from functools import wraps
-from typing import TYPE_CHECKING, TypeVar
-
-from typing_extensions import Concatenate, ParamSpec
+from typing import TYPE_CHECKING, Concatenate, ParamSpec, TypeVar
 
 if TYPE_CHECKING:
     from textual.notifications import SeverityLevel
