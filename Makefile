@@ -2,97 +2,72 @@ lib              := pyinkr
 exec             := inkr
 src              := src/
 
-##############################################################################
-# Local "interactive testing" of the code.
+RUFF         ?= uvx ruff
+BASEDPYRIGHT ?= uvx basedpyright
+CODESPELL    ?= uvx codespell
+PYTHON       ?= uv run python
+
+##@ Development
+
 .PHONY: run
 run:				# Run the code in a testing context
-	$(python) -m $(lib)
-
-.PHONY: debug
-debug:				# Run the code with Textual devtools enabled
-	TEXTUAL=devtools make
+	$(PYTHON) -m $(lib)
 
 .PHONY: console
 console:			# Run the textual console
-	textual console
+	uv run textual console
 
 .PHONY: dev
-dev: 					# Run in development mode with hot reload
-	textual run --dev -c "$(exec)"
+dev:				# Run in development mode with hot reload
+	uv run textual run --dev -c "$(exec)"
 
-##############################################################################
-# Setup/update packages the system requires.
 .PHONY: setup
 setup:				# Set up the repository for development
 	uv venv --allow-existing
 	uv sync
 
-.PHONY: update
-update:				# Update all dependencies
-	uv sync --upgrade
+##@ Checking
 
-.PHONY: resetup
-resetup: realclean		# Recreate the virtual environment from scratch
-	make setup
-
-##############################################################################
-# Checking/testing/linting/etc.
 .PHONY: lint
 lint:				# Check the code for linting issues
-	ruff check $(src)
+	$(RUFF) check $(src)
 
 .PHONY: codestyle
 codestyle:			# Is the code formatted correctly?
-	ruff format --check $(src)
+	$(RUFF) format --check $(src)
 
 .PHONY: typecheck
 typecheck:			# Perform static type checks with basedpyright
-	basedpyright $(src)
+	$(BASEDPYRIGHT) $(src)
 
 .PHONY: spellcheck
 spellcheck:			# Spell check the code
-	 codespell *.md $(src)
+	$(CODESPELL) *.md $(src)
 
 .PHONY: checkall
-checkall: spellcheck codestyle lint typecheck # Check all the things
+checkall: spellcheck codestyle lint typecheck	# Check all the things
 
-##############################################################################
-# Package
-.PHONY: package
-package:			# Package the library
-	uv build
-
-.PHONY: spackage
-spackage:			# Create a source package for the library
-	uv build --sdist
-
-##############################################################################
-# Utility.
-.PHONY: repl
-repl:				# Start a ptPython REPL in the venv.
-	$(ptpython)
+##@ Utility
 
 .PHONY: delint
-delint:			# Fix linting issues.
-	ruff check --fix $(src)
+delint:				# Fix linting issues.
+	$(RUFF) check --fix $(src)
 
 .PHONY: pep8ify
 pep8ify:			# Reformat the code to be as PEP8 as possible.
-	ruff format $(src)
+	$(RUFF) format $(src)
 
 .PHONY: tidy
 tidy: delint pep8ify		# Tidy up the code, fixing lint and format issues.
 
 .PHONY: clean
-clean:		# Clean the package building files
-	rm -rf dist/ build/ $(src)*.egg-info .pytest_cache
+clean:				# Clean the package building files
+	rm -rf dist/ build/ $(src)*.egg-info .pytest_cache .ruff_cache
 	find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete
 
-.PHONY: realclean
-realclean: clean		# Clean the venv and build directories
-	rm -rf .venv
-
 .PHONY: help
 help:				# Display this help
-	@grep -Eh "^[a-z]+:.+# " $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.+# "}; {printf "%-20s %s\n", $$1, $$2}'
+	@awk 'BEGIN {FS = ":.+# "} \
+		/^[a-zA-Z_-]+:.+# / {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2} \
+		/^##@/ {printf "\n\033[1m%s\033[0m\n", substr($$0, 5)}' $(MAKEFILE_LIST)
