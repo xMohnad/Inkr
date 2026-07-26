@@ -1,0 +1,65 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  checkall:
+    name: Lint, format, typecheck & spellcheck
+    uses: ./.github/workflows/check.yml
+
+  deploy-and-release:
+    needs: checkall
+    runs-on: ubuntu-latest
+
+    environment:
+      name: release
+
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches package version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(grep -m1 '^version' pyproject.toml | cut -d '"' -f2)
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag ($TAG_VERSION) does not match pyproject.toml version ($PKG_VERSION)"
+            exit 1
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: make setup
+
+      - name: Build the package
+        run: uv build --link-mode copy
+
+      - name: List dist directory
+        run: ls -l dist/
+
+      - name: Check distribution's long description rendering on PyPI
+        run: uvx twine check dist/*
+
+      - name: Publish package to PyPI
+        run: uv publish
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
