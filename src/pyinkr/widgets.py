@@ -56,7 +56,7 @@ class ListTrack(ListView):
     @catch_errors()
     async def action_add_track(self) -> None:
         """Add a new track from a file."""
-        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
+        if path := self.app.call_from_thread(lambda: self.app.push_screen_wait(FileOpen())):
             self.app.call_from_thread(setattr, self, "loading", True)
             track = self.mkv.add_track(path)
             self.app.call_from_thread(self.append, self.list_item(track))
@@ -213,7 +213,7 @@ class ListAttachment(ListView):
     @catch_errors()
     async def action_add_attachment(self) -> None:
         """Add a new attachment from a file."""
-        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
+        if path := self.app.call_from_thread(lambda: self.app.push_screen_wait(FileOpen())):
             attachment = self.mkv.add_attachment(path)
             self.app.call_from_thread(self.append, self.list_item(attachment))
             self.app.call_from_thread(self.focus)
