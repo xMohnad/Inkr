@@ -2,18 +2,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Container, Horizontal, Middle
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Header, Input, ProgressBar
+from textual.widgets import Button, DataTable, Footer, Header, Input, ProgressBar, Static
 from typing_extensions import override
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from typing import ClassVar
 
     from textual.binding import BindingType
+
+    from pyinkr.fonts import FontUsage, SubtitleFontInfo
 
 
 class EditScreen(ModalScreen[str | None]):
@@ -183,3 +187,58 @@ class ProgressBarScreen(ModalScreen[None]):
         self.progress_bar.update(progress=progress)
         if progress >= self._total:
             self.dismiss(None)
+
+
+class FontsScreen(ModalScreen[None]):
+    """A modal screen listing the fonts a subtitle track needs."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape,enter,space", "close", "Close")]
+
+    def __init__(
+        self,
+        info: SubtitleFontInfo,
+        title: str = "Fonts Used",
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+    ) -> None:
+        """Initialize the FontsScreen with the fonts to display."""
+        super().__init__(name=name, id=id, classes=classes)
+        self._info: SubtitleFontInfo = info
+        self._title: str = title
+
+    @override
+    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
+        yield Header()
+        with Container(id="fonts-container") as container:
+            container.border_title = self._title
+            container.border_subtitle = f"{len(self._info.usages)} variant(s)"
+            if self._info.has_embedded_fonts:
+                yield Static("This subtitle already embeds its own fonts.", id="fonts-note")
+            if self._info.usages:
+                yield DataTable(id="fonts-table", cursor_type="row", zebra_stripes=True)
+            else:
+                with Center():
+                    with Middle():
+                        yield Static("No fonts found in this subtitle.")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        """Populate the table once mounted."""
+        if usages := self._info.usages:
+            table = self.query_one("#fonts-table", DataTable)
+            table.add_columns("Font", "Style")
+            for usage in sorted(usages, key=lambda u: (u.name.lower(), u.weight, u.italic)):
+                table.add_row(usage.name, self._style_label(usage))
+
+    @staticmethod
+    def _style_label(usage: FontUsage) -> Text:
+        """Return a colored 'Bold', 'Italic', 'Bold, Italic', or 'Regular' label."""
+        parts = [name for flag, name in ((usage.is_bold, "Bold"), (usage.italic, "Italic")) if flag]
+        if not parts:
+            return Text("Regular", style="dim")
+        return Text(", ".join(parts), style="bold yellow")
+
+    def action_close(self) -> None:
+        """Close the screen."""
+        self.dismiss(None)

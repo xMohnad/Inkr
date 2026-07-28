@@ -14,8 +14,9 @@ from textual.widgets import Checkbox, ListItem, ListView, Tree
 from textual_fspicker import FileOpen
 from typing_extensions import override
 
+from pyinkr import fonts
 from pyinkr.decorators import catch_errors
-from pyinkr.dialogs import DelayScreen, EditScreen
+from pyinkr.dialogs import DelayScreen, EditScreen, FontsScreen
 
 if TYPE_CHECKING:
     from typing import Callable
@@ -39,6 +40,7 @@ class ListTrack(ListView):
         Binding("l", "edit_lang", "Lang"),
         Binding("y", "edit_delay", "Delay"),
         Binding("d", "toggle_default", "Toggle Default"),
+        Binding("f", "check_fonts", "Fonts"),
         Binding("enter,space", "select", "Select", show=False),
         Binding("alt+up", "move_up", "Move Up", show=False),
         Binding("alt+down", "move_down", "Move Down", show=False),
@@ -100,6 +102,21 @@ class ListTrack(ListView):
         if result is not None:
             track.sync = result or None
             self.get_checkbox.label = self.formatted_text(track)
+
+    @work(exclusive=True, thread=True)
+    @catch_errors(severity="warning")
+    async def action_check_fonts(self) -> None:
+        """Show the fonts required by the selected subtitle track."""
+        track = self.get_track
+        self.app.call_from_thread(setattr, self, "loading", True)
+        try:
+            info = fonts.analyze_subtitle_fonts(track)
+        finally:
+            self.app.call_from_thread(setattr, self, "loading", False)
+        self.app.call_from_thread(
+            self.app.push_screen,
+            FontsScreen(info, title=f"Fonts — {self._track_label(track)}"),
+        )
 
     @staticmethod
     def _track_label(track: "MKVTrack") -> str:
