@@ -43,21 +43,29 @@ ListView {
   }
 }
 
-EditScreen {
+EditScreen,
+DelayScreen,
+ProgressBarScreen,
+FontsScreen {
   align: center middle;
 
   Container {
     width: 85%;
-    height: auto;
     min-height: 10;
-    padding: 1;
 
     border: $border;
     background: $panel;
     border-title-color: $text;
     border-title-background: $panel;
-    border-subtitle-color: $text;
-    border-subtitle-background: $error;
+    border-subtitle-color: $text-muted;
+    border-subtitle-background: $panel;
+  }
+}
+
+EditScreen {
+  Container {
+    height: auto;
+    padding: 1;
 
     Input {
       padding: 0 1;
@@ -78,20 +86,9 @@ EditScreen {
 }
 
 DelayScreen {
-  align: center middle;
-
   Container {
-    width: 85%;
     height: auto;
-    min-height: 10;
     padding: 1;
-
-    border: $border;
-    background: $panel;
-    border-title-color: $text;
-    border-title-background: $panel;
-    border-subtitle-color: $text;
-    border-subtitle-background: $error;
 
     #delay-row {
       align: center middle;
@@ -132,18 +129,8 @@ NoticeWidget {
 }
 
 FontsScreen {
-  align: center middle;
-
   Container {
-    width: 85%;
     height: 80%;
-
-    border: $border;
-    background: $panel;
-    border-title-color: $text;
-    border-title-background: $panel;
-    border-subtitle-color: $text-muted;
-    border-subtitle-background: $panel;
 
     #fonts-note {
       height: auto;
@@ -164,18 +151,8 @@ FontsScreen {
 }
 
 ProgressBarScreen {
-  align: center middle;
-
   Container {
     width: 95%;
     height: 30%;
-    min-height: 10;
-
-    border: $border;
-    background: $panel;
-    border-title-color: $text;
-    border-title-background: $panel;
-    border-subtitle-color: $text;
-    border-subtitle-background: $error;
   }
 }
