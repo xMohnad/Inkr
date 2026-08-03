@@ -11,7 +11,7 @@ TabbedContent {
   }
 }
 
-ListView {
+ChecklistView {
   & > ListItem {
     background: $surface;
     height: auto;

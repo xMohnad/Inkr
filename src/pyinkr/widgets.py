@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 
-from msgspec.structs import Struct, asdict
+import msgspec
 from pymkv.models import MkvMergeOutput
 from rich.text import Text
 from textual import work
@@ -19,7 +20,7 @@ from pyinkr.decorators import catch_errors
 from pyinkr.dialogs import DelayScreen, EditScreen, FontsScreen
 
 if TYPE_CHECKING:
-    from typing import Callable
+    from typing import ClassVar
 
     from pymkv import MKVAttachment, MKVTrack
     from rich.console import RenderableType
@@ -29,10 +30,94 @@ if TYPE_CHECKING:
     from pyinkr.services import MkvService
 
 
-class ListTrack(ListView):
-    """List of MKV tracks."""
+ItemT = TypeVar("ItemT")
+
+
+class ChecklistView(ListView, Generic[ItemT]):
+    """Base for a `ListView` of checkbox items."""
 
     app: Inkr
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("enter,space", "toggle_button", "Toggle", show=False),
+    ]
+
+    @work(exclusive=True)
+    async def on_mount(self) -> None:
+        """Load items when mounted."""
+        items = self.items
+        async with self.batch():
+            await self.extend([self.list_item(item) for item in items])
+        self.index = 0 if items else None
+
+    @property
+    def mkv(self) -> "MkvService":
+        """Return the application's MKV service."""
+        return self.app.mkv
+
+    @property
+    def items(self) -> Sequence[ItemT]:
+        """Return the domain objects backing this list, in display order."""
+        raise NotImplementedError
+
+    def formatted_text(self, item: ItemT) -> Text:
+        """Return formatted text for display in a Checkbox."""
+        raise NotImplementedError
+
+    @staticmethod
+    def label(item: ItemT) -> str:
+        """Return a short human label used to identify `item` in dialog titles."""
+        raise NotImplementedError
+
+    def list_item(self, item: ItemT) -> ListItem:
+        """Return a ListItem representation of `item`."""
+        return ListItem(Checkbox(self.formatted_text(item), True))
+
+    async def add_item(self, item: ItemT) -> None:
+        """Append `item` to the list and select it."""
+        await self.append(self.list_item(item))
+        self.loading = False
+        self.index = len(self) - 1
+        self.focus()
+
+    @property
+    def checkbox(self) -> "Checkbox":
+        """Return the Checkbox widget for the currently selected item."""
+        if self.index is None:
+            raise ValueError("No item is currently selected.")
+        return self.children[self.index].query_one(Checkbox)
+
+    @property
+    def item(self) -> ItemT:
+        """Return the currently selected domain object."""
+        if self.index is None:
+            raise ValueError("No item is currently selected.")
+        return self.items[self.index]
+
+    @catch_errors()
+    async def action_toggle_button(self) -> None:
+        """Toggle selection state of the current item."""
+        self.checkbox.toggle()
+
+    @work(exclusive=True)
+    @catch_errors()
+    async def edit_field(
+        self,
+        *,
+        field: str,
+        placeholder: str,
+        attr: str,
+    ) -> None:
+        """Shared flow for editing a single string field on the selected item."""
+        item = self.item
+        title = f"Edit {field} — {self.label(item)}"
+        if value := await self.app.push_screen_wait(EditScreen(getattr(item, attr), title, placeholder)):
+            setattr(item, attr, value)
+            self.checkbox.label = self.formatted_text(item)
+
+
+class ListTrack(ChecklistView["MKVTrack"]):
+    """List of MKV tracks."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("a", "add_track", "Add"),
@@ -41,18 +126,22 @@ class ListTrack(ListView):
         Binding("y", "edit_delay", "Delay"),
         Binding("d", "toggle_default", "Toggle Default"),
         Binding("f", "check_fonts", "Fonts"),
-        Binding("enter,space", "select", "Select", show=False),
         Binding("alt+up", "move_up", "Move Up", show=False),
         Binding("alt+down", "move_down", "Move Down", show=False),
     ]
 
-    @work(exclusive=True)
+    @property
     @override
-    async def on_mount(self) -> None:
-        """Load tracks when mounted."""
-        async with self.batch():
-            await self.extend([self.list_item(track) for track in self.mkv.tracks])
-        self.index: int = 0
+    def items(self) -> Sequence["MKVTrack"]:
+        return self.mkv.tracks
+
+    @staticmethod
+    @override
+    def label(item: "MKVTrack") -> str:
+        """Build a short human label used to identify a track in dialog titles."""
+        kind = (item.track_type or "track").capitalize()
+        name = item.track_name or "Unnamed"
+        return f"{kind}: {name.strip()}"
 
     @work(exclusive=True, thread=True)
     @catch_errors()
@@ -61,97 +150,48 @@ class ListTrack(ListView):
         if path := self.app.call_from_thread(lambda: self.app.push_screen_wait(FileOpen())):
             self.app.call_from_thread(setattr, self, "loading", True)
             track = self.mkv.add_track(path)
-            self.app.call_from_thread(self.append, self.list_item(track))
-            self.app.call_from_thread(setattr, self, "loading", False)
-            self.app.call_from_thread(self.focus)
+            self.app.call_from_thread(self.add_item, track)
 
     async def action_toggle_default(self) -> None:
         """Toggle the default flag on the selected track."""
-        track = self.get_track
+        track = self.item
         track.default_track = not track.default_track
-        self.get_checkbox.label = self.formatted_text(track)
+        self.checkbox.label = self.formatted_text(track)
 
-    @work(exclusive=True)
-    async def action_edit_name(self) -> None:
+    def action_edit_name(self) -> None:
         """Edit the track name."""
-        await self._edit_track_field(
-            title=f"Edit Name — {self._track_label(self.get_track)}",
-            placeholder="Enter name...",
-            get=lambda t: t.track_name,
-            set=self._set_track_name,
-        )
+        self.edit_field(field="Name", placeholder="Enter name...", attr="track_name")
 
-    @work(exclusive=True)
-    async def action_edit_lang(self) -> None:
+    def action_edit_lang(self) -> None:
         """Edit the track language."""
-        await self._edit_track_field(
-            title=f"Edit Language — {self._track_label(self.get_track)}",
-            placeholder="Enter language...",
-            get=lambda t: t.language,
-            set=self._set_track_lang,
-        )
+        self.edit_field(field="Language", placeholder="Enter language...", attr="language")
 
     @work(exclusive=True)
     @catch_errors()
     async def action_edit_delay(self) -> None:
         """Edit the track sync delay."""
-        track = self.get_track
+        track = self.item
         result = await self.app.push_screen_wait(
-            DelayScreen(track.sync or 0, title=f"Delay — {self._track_label(track)}")
+            DelayScreen(track.sync or 0, title=f"Delay — {self.label(track)}"),
         )
         if result is not None:
             track.sync = result or None
-            self.get_checkbox.label = self.formatted_text(track)
+            self.checkbox.label = self.formatted_text(track)
 
     @work(exclusive=True, thread=True)
     @catch_errors(severity="warning")
     async def action_check_fonts(self) -> None:
         """Show the fonts required by the selected subtitle track."""
-        track = self.get_track
+        track = self.item
         self.app.call_from_thread(setattr, self, "loading", True)
         try:
             info = fonts.analyze_subtitle_fonts(track)
+            self.app.call_from_thread(
+                self.app.push_screen,
+                FontsScreen(info, title=f"Fonts — {self.label(track)}"),
+            )
         finally:
             self.app.call_from_thread(setattr, self, "loading", False)
-        self.app.call_from_thread(
-            self.app.push_screen,
-            FontsScreen(info, title=f"Fonts — {self._track_label(track)}"),
-        )
-
-    @staticmethod
-    def _track_label(track: "MKVTrack") -> str:
-        """Build a short human label used to identify a track in dialog titles."""
-        kind = (track.track_type or "track").capitalize()
-        name = track.track_name or "Unnamed"
-        return f"{kind}: {name.strip()}"
-
-    @catch_errors()
-    async def _edit_track_field(
-        self,
-        *,
-        title: str,
-        placeholder: str,
-        get: "Callable[[MKVTrack], str | None]",
-        set: "Callable[[MKVTrack, str], None]",
-    ) -> None:
-        """Shared flow for editing a single string field on the selected track."""
-        track = self.get_track
-        if value := await self.app.push_screen_wait(EditScreen(get(track), title, placeholder)):
-            set(track, value)
-            self.get_checkbox.label = self.formatted_text(track)
-
-    @staticmethod
-    def _set_track_name(track: "MKVTrack", value: str) -> None:
-        track.track_name = value
-
-    @staticmethod
-    def _set_track_lang(track: "MKVTrack", value: str) -> None:
-        track.language = value
-
-    @catch_errors()
-    async def action_select(self) -> None:
-        """Toggle selection state of the current track."""
-        self.get_checkbox.toggle()
 
     async def action_move_up(self) -> None:
         """Move the selected track up."""
@@ -167,160 +207,70 @@ class ListTrack(ListView):
             self.move_child(self.index, after=self.index + 1)
             self.index += 1
 
-    def formatted_text(self, track: "MKVTrack") -> Text:
+    @override
+    def formatted_text(self, item: "MKVTrack") -> Text:
         """Return formatted text for display in a Checkbox."""
-        name = track.track_name or "Unnamed"
-        lang = track.language or "und"
-        codec = track.track_codec or "?"
+        name = item.track_name or "Unnamed"
+        lang = item.language or "und"
+        codec = item.track_codec or "?"
 
         text = Text(name, style="bold")
         text += Text(f"  [{lang} · {codec}]", style="dim")
-        if track.default_track:
+        if item.default_track:
             text += Text("  DEFAULT", style="bold green")
-        if track.sync:
-            sign = "+" if track.sync > 0 else ""
-            text += Text(f"  ⏱ {sign}{track.sync / 1000:.2f}s", style="italic yellow")
+        if item.sync:
+            sign = "+" if item.sync > 0 else ""
+            text += Text(f"  ⏱ {sign}{item.sync / 1000:.2f}s", style="italic yellow")
         return text
 
-    def list_item(self, track: "MKVTrack", value: bool = True) -> ListItem:
-        """Return a ListItem representation of the track."""
-        return ListItem(Checkbox(self.formatted_text(track), value))
 
-    @property
-    def get_checkbox(self) -> "Checkbox":
-        """Return the Checkbox widget for the currently selected track."""
-        if self.index is None:
-            raise ValueError("No track is currently selected.")
-        return self.children[self.index].query_one(Checkbox)
-
-    @property
-    def get_track(self) -> "MKVTrack":
-        """Return the currently selected track."""
-        if self.index is None:
-            raise ValueError("No track is currently selected.")
-        return self.mkv.tracks[self.index]
-
-    @property
-    def mkv(self) -> "MkvService":
-        """Return the application's MKV service."""
-        return self.app.mkv
-
-
-class ListAttachment(ListView):
+class ListAttachment(ChecklistView["MKVAttachment"]):
     """List of MKV attachments."""
-
-    app: Inkr
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("a", "add_attachment", "Add"),
         Binding("n", "edit_name", "Name"),
         Binding("e", "edit_description", "Description"),
-        Binding("enter,space", "select", "Select", show=False),
     ]
 
-    @work(exclusive=True)
+    @property
     @override
-    async def on_mount(self) -> None:
-        """Load attachments when mounted."""
-        async with self.batch():
-            await self.extend([self.list_item(attachment) for attachment in self.mkv.attachments])
-        self.index: int | None = 0
+    def items(self) -> Sequence["MKVAttachment"]:
+        return self.mkv.attachments
 
-    @work(exclusive=True, thread=True)
+    @staticmethod
+    @override
+    def label(item: "MKVAttachment") -> str:
+        """Build a short human label used to identify an attachment in dialog titles."""
+        return item.name or Path(item.file_path).name
+
+    @work(exclusive=True)
     @catch_errors()
     async def action_add_attachment(self) -> None:
         """Add a new attachment from a file."""
-        if path := self.app.call_from_thread(lambda: self.app.push_screen_wait(FileOpen())):
+        if path := await self.app.push_screen_wait(FileOpen()):
             attachment = self.mkv.add_attachment(path)
-            self.app.call_from_thread(self.append, self.list_item(attachment))
-            self.app.call_from_thread(self.focus)
+            await self.add_item(attachment)
 
-    @catch_errors()
-    async def action_select(self) -> None:
-        """Toggle the selected attachment."""
-        self.get_checkbox.toggle()
-
-    @work(exclusive=True)
-    async def action_edit_name(self) -> None:
+    def action_edit_name(self) -> None:
         """Edit the attachment name."""
-        await self._edit_attachment_field(
-            title=f"Edit Name — {self._attachment_label(self.get_attachment)}",
-            placeholder="Enter name...",
-            get=lambda a: a.name,
-            set=self._set_attachment_name,
-        )
+        self.edit_field(field="Name", placeholder="Enter name...", attr="name")
 
-    @work(exclusive=True)
-    async def action_edit_description(self) -> None:
+    def action_edit_description(self) -> None:
         """Edit the attachment description."""
-        await self._edit_attachment_field(
-            title=f"Edit Description — {self._attachment_label(self.get_attachment)}",
-            placeholder="Enter description...",
-            get=lambda a: a.description,
-            set=self._set_attachment_description,
-        )
+        self.edit_field(field="Description", placeholder="Enter description...", attr="description")
 
-    @staticmethod
-    def _attachment_label(attachment: "MKVAttachment") -> str:
-        """Build a short human label used to identify an attachment in dialog titles."""
-        return attachment.name or Path(attachment.file_path).name
-
-    @catch_errors()
-    async def _edit_attachment_field(
-        self,
-        *,
-        title: str,
-        placeholder: str,
-        get: "Callable[[MKVAttachment], str | None]",
-        set: "Callable[[MKVAttachment, str], None]",
-    ) -> None:
-        """Shared flow for editing a single string field on the selected attachment."""
-        attachment = self.get_attachment
-        if value := await self.app.push_screen_wait(EditScreen(get(attachment), title, placeholder)):
-            set(attachment, value)
-            self.get_checkbox.label = self.formatted_text(attachment)
-
-    @staticmethod
-    def _set_attachment_name(attachment: "MKVAttachment", value: str) -> None:
-        attachment.name = value
-
-    @staticmethod
-    def _set_attachment_description(attachment: "MKVAttachment", value: str) -> None:
-        attachment.description = value
-
-    def formatted_text(self, attachment: "MKVAttachment") -> Text:
+    @override
+    def formatted_text(self, item: "MKVAttachment") -> Text:
         """Return formatted text for display in the list."""
-        name = self._attachment_label(attachment)
-        mime = attachment.mime_type or "?"
+        name = self.label(item)
+        mime = item.mime_type or "?"
 
         text = Text(name, style="bold")
         text += Text(f"  [{mime}]", style="dim")
-        if attachment.description:
-            text += Text(f"  — {attachment.description}", style="italic")
+        if item.description:
+            text += Text(f"  — {item.description}", style="italic")
         return text
-
-    def list_item(self, attachment: "MKVAttachment", value: bool = True) -> ListItem:
-        """Return a ListItem representation of the attachment."""
-        return ListItem(Checkbox(self.formatted_text(attachment), value))
-
-    @property
-    def get_checkbox(self) -> "Checkbox":
-        """Return the Checkbox widget for the currently selected attachment."""
-        if self.index is None:
-            raise ValueError("No attachment is currently selected.")
-        return self.children[self.index].query_one(Checkbox)
-
-    @property
-    def get_attachment(self) -> "MKVAttachment":
-        """Return the currently selected attachment."""
-        if self.index is None:
-            raise ValueError("No attachment is currently selected.")
-        return self.mkv.attachments[self.index]
-
-    @property
-    def mkv(self) -> "MkvService":
-        """Return the application's MKV service."""
-        return self.app.mkv
 
 
 class InfoTree(Tree[None]):
@@ -335,30 +285,15 @@ class InfoTree(Tree[None]):
     ]
 
     app: Inkr
-    info: reactive[MkvMergeOutput | None] = reactive(None, init=False)
-
-    @override
-    def on_mount(self) -> None:
-        """Initialize the tree when mounted."""
-        if info := self.app.mkv.info_json:
-            self.info = info
+    info: reactive[MkvMergeOutput | None] = reactive(None)
 
     async def watch_info(self, info: MkvMergeOutput | None) -> None:
         """Update the tree when info changes."""
 
-        def struct_to_dict(obj: object) -> dict[str, object] | list[object] | object:
-            """Convert msgspec Struct objects to nested dictionaries."""
-            if isinstance(obj, Struct):
-                return {k: struct_to_dict(v) for k, v in asdict(obj).items()}
-            elif isinstance(obj, list):
-                return [struct_to_dict(i) for i in obj]
-            elif isinstance(obj, dict):
-                return {k: struct_to_dict(v) for k, v in obj.items()}
-            else:
-                return obj
-
         if info:
-            self.add_json(struct_to_dict(info))
+            self.add_json(msgspec.to_builtins(info))
+        else:
+            self.info = self.app.mkv.info_json
 
     @work(exclusive=True)
     @catch_errors()
