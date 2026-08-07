@@ -66,6 +66,7 @@ line-length = 120
 # D401: docstrings should start with an imperative verb ("Return the...",
 # not "Returns the...").
 select = [
+  "F401",
   "D101",
   "D102",
   "D103",
