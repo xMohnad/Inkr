@@ -1,19 +1,29 @@
 from __future__ import annotations
 
+import logging
 import re
 import tempfile
+from contextlib import suppress
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from fontTools.ttLib import TTFont
+from fontTools.ttLib.ttCollection import TTCollection
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
     from pymkv import MKVTrack
 
+logging.getLogger("fontTools").setLevel(logging.CRITICAL)
+
 SUPPORTED_SUBTITLE_CODECS: frozenset[str] = frozenset({"SubStationAlpha"})
 """mkvmerge's human-readable codec name, shared by both ASS and SSA."""
+
+FONT_FILE_EXTENSIONS: frozenset[str] = frozenset({".ttf", ".otf", ".ttc", ".otc"})
+"""File extensions treated as fonts when scanning a folder."""
 
 
 def is_subtitle_track(track: MKVTrack) -> bool:
@@ -85,6 +95,16 @@ class FontUsage:
     def is_bold(self) -> bool:
         """Return whether this usage is bold."""
         return self.weight >= 700
+
+
+@dataclass(frozen=True, slots=True)
+class FontFile:
+    """One font face found on disk, with the info needed to match it to a `FontUsage`."""
+
+    path: Path
+    family_names: frozenset[str]
+    weight: int
+    italic: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +240,43 @@ def _extract_font_usages(styles: dict[str, FontUsage], dialogue_lines: list[_Dia
     return usages
 
 
+def _load_font_objects(path: Path) -> list[TTFont]:
+    """Load `path` as a list of TTFont objects, or an empty list if unreadable/unsupported."""
+    try:
+        with path.open("rb") as f:
+            magic = f.read(4)
+
+        if magic == b"ttcf":
+            return TTCollection(path, lazy=True).fonts
+        if magic in (b"\x00\x01\x00\x00", b"OTTO"):
+            return [TTFont(path, lazy=True)]
+        return []
+    except Exception:
+        return []
+
+
+def _read_font_faces(path: Path) -> list[FontFile]:
+    """Return a `FontFile` for each usable face in the font file at `path`."""
+    results: list[FontFile] = []
+    for tt in _load_font_objects(path):
+        names: set[str] = set()
+        with suppress(Exception):
+            for record in tt["name"].names:
+                if record.nameID in (1, 4, 16):  # Family, Full name, Typographic family
+                    if n := record.toUnicode().strip():
+                        names.add(n.lower())
+
+        weight, italic = 400, False
+        if "OS/2" in tt:
+            os2 = tt["OS/2"]
+            weight = int(getattr(os2, "usWeightClass", 400)) or 400
+            fs = getattr(os2, "fsSelection", 0)
+            italic = bool(fs & 1 or fs & (1 << 9))  # bit 0 = Italic, bit 9 = Oblique
+
+        results.append(FontFile(path=path, family_names=frozenset(names), weight=weight, italic=italic))
+    return results
+
+
 @lru_cache(maxsize=32)
 def analyze_subtitle_fonts(track: MKVTrack) -> SubtitleFontInfo:
     """Return the fonts `track` needs, and whether it already embeds fonts.
@@ -237,3 +294,21 @@ def analyze_subtitle_fonts(track: MKVTrack) -> SubtitleFontInfo:
     parsed = _parse_ass_minimal(_iter_subtitle_lines(track))
     usages = _extract_font_usages(parsed.styles, parsed.dialogue_lines)
     return SubtitleFontInfo(frozenset(usages), parsed.has_embedded_fonts)
+
+
+def scan_font_faces(directory: Path) -> list[FontFile]:
+    """Scan `directory` for font files, returning every face found."""
+    faces: list[FontFile] = []
+    for candidate in directory.rglob("*"):
+        if candidate.is_file() and candidate.suffix.lower() in FONT_FILE_EXTENSIONS:
+            faces.extend(_read_font_faces(candidate))
+    return faces
+
+
+def find_best_match(usage: FontUsage, faces: Iterable[FontFile]) -> FontFile | None:
+    """Return the face among `faces` that best matches `usage`'s name/weight/italic, if any."""
+    target = usage.name.strip().lower()
+    candidates = [face for face in faces if target in face.family_names]
+    if candidates:
+        return min(candidates, key=lambda face: (face.italic != usage.italic, abs(face.weight - usage.weight)))
+    return None

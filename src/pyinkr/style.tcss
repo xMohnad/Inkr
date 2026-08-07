@@ -46,7 +46,8 @@ ChecklistView {
 EditScreen,
 DelayScreen,
 ProgressBarScreen,
-FontsScreen {
+FontsScreen,
+PickFolderScreen {
   align: center middle;
 
   Container {
@@ -62,7 +63,8 @@ FontsScreen {
   }
 }
 
-EditScreen {
+EditScreen,
+PickFolderScreen {
   Container {
     height: auto;
     padding: 1;
@@ -154,5 +156,20 @@ ProgressBarScreen {
   Container {
     width: 95%;
     height: 30%;
+  }
+}
+
+PickFolderScreen {
+  Container {
+    Input {
+      width: 1fr;
+    }
+
+    #folder-row {
+      Button {
+        min-width: 10;
+        margin-left: 1;
+      }
+    }
   }
 }
