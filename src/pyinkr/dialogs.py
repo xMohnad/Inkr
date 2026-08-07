@@ -1,23 +1,27 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.text import Text
-from textual import on
+from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Container, Horizontal, Middle
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, ProgressBar, Static
+from textual_fspicker import SelectDirectory
 from typing_extensions import override
 
+from pyinkr import fonts
+from pyinkr.decorators import catch_errors
+
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from typing import ClassVar
 
     from textual.binding import BindingType
 
-    from pyinkr.fonts import FontUsage, SubtitleFontInfo
+    from pyinkr.main import Inkr
 
 
 class EditScreen(ModalScreen[str | None]):
@@ -192,11 +196,16 @@ class ProgressBarScreen(ModalScreen[None]):
 class FontsScreen(ModalScreen[None]):
     """A modal screen listing the fonts a subtitle track needs."""
 
-    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape,enter,space", "close", "Close")]
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape,enter,space", "close", "Close"),
+        Binding("i", "import_fonts", "Import"),
+    ]
+
+    app: Inkr
 
     def __init__(
         self,
-        info: SubtitleFontInfo,
+        info: fonts.SubtitleFontInfo,
         title: str = "Fonts Used",
         name: str | None = None,
         id: str | None = None,
@@ -204,8 +213,9 @@ class FontsScreen(ModalScreen[None]):
     ) -> None:
         """Initialize the FontsScreen with the fonts to display."""
         super().__init__(name=name, id=id, classes=classes)
-        self._info: SubtitleFontInfo = info
+        self._info: fonts.SubtitleFontInfo = info
         self._title: str = title
+        self._usages: list[fonts.FontUsage] = sorted(info.usages, key=lambda u: (u.name.lower(), u.weight, u.italic))
 
     @override
     def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
@@ -215,7 +225,7 @@ class FontsScreen(ModalScreen[None]):
             container.border_subtitle = f"{len(self._info.usages)} variant(s)"
             if self._info.has_embedded_fonts:
                 yield Static("This subtitle already embeds its own fonts.", id="fonts-note")
-            if self._info.usages:
+            if self._usages:
                 yield DataTable(id="fonts-table", cursor_type="row", zebra_stripes=True)
             else:
                 with Center():
@@ -225,20 +235,130 @@ class FontsScreen(ModalScreen[None]):
 
     def on_mount(self) -> None:
         """Populate the table once mounted."""
-        if usages := self._info.usages:
+        if usages := self._usages:
             table = self.query_one("#fonts-table", DataTable)
-            table.add_columns("Font", "Style")
-            for usage in sorted(usages, key=lambda u: (u.name.lower(), u.weight, u.italic)):
-                table.add_row(usage.name, self._style_label(usage))
+            table.add_columns("Font", "Style", ("Status", "status"))
+            for i, usage in enumerate(usages):
+                table.add_row(usage.name, self._style_label(usage), "-", key=str(i))
 
     @staticmethod
-    def _style_label(usage: FontUsage) -> Text:
+    def _style_label(usage: fonts.FontUsage) -> Text:
         """Return a colored 'Bold', 'Italic', 'Bold, Italic', or 'Regular' label."""
         parts = [name for flag, name in ((usage.is_bold, "Bold"), (usage.italic, "Italic")) if flag]
         if not parts:
             return Text("Regular", style="dim")
         return Text(", ".join(parts), style="bold yellow")
 
+    @work(exclusive=True)
+    @catch_errors(severity="warning")
+    async def action_import_fonts(self) -> None:
+        """Import every font this subtitle needs."""
+        if not (self.app.font_faces and self._usages):
+            return
+
+        from pyinkr.widgets import ListAttachment
+
+        list_view = self.app.screen_stack[-2].query_one(ListAttachment)
+        table = self.query_one("#fonts-table", DataTable)
+
+        seen: set[str] = {Path(n.file_path).name for n in self.app.mkv.attachments}
+        for i, usage in enumerate(self._usages):
+            match = fonts.find_best_match(usage, self.app.font_faces)
+            if not match:
+                status = Text("Not Found", style="bold red")
+            elif match.path.name in seen:
+                status = Text("Already Attached", style="bold cyan")
+            else:
+                seen.add(match.path.name)
+                status = Text("Imported", style="bold green")
+
+                a = self.app.mkv.add_attachment(match.path)
+                a.description = str(status)
+                list_view.add_item(a)
+
+            table.update_cell(str(i), "status", status, update_width=True)
+
     def action_close(self) -> None:
         """Close the screen."""
+        self.dismiss(None)
+
+
+class PickFolderScreen(ModalScreen[Path | None]):
+    """A modal screen for picking a folder."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("s", "save", "Save"),
+        Binding("p", "browse", "Browse"),
+    ]
+
+    def __init__(
+        self,
+        value: str | None = None,
+        title: str | None = None,
+        placeholder: str = "Path to a folder...",
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
+    ) -> None:
+        """Initialize the folder picker."""
+        super().__init__(name=name, id=id, classes=classes)
+        self._value: str | None = value
+        self._title: str | None = title
+        self._placeholder: str = placeholder
+
+    @override
+    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
+        yield Header()
+        with Container() as container:
+            container.border_title = self._title
+            with Horizontal(id="folder-row"):
+                yield Input(
+                    value=self._value,
+                    placeholder=self._placeholder,
+                    id="folder-input",
+                )
+                yield Button("Browse", id="browse-btn")
+            with Horizontal(id="action-row"):
+                yield Button("Save", variant="primary", id="save-btn")
+                yield Button("Cancel", id="cancel-btn")
+        yield Footer()
+
+    @on(Button.Pressed, "#browse-btn")
+    @work(exclusive=True)
+    async def action_browse(self) -> None:
+        """Open folder picker."""
+        folder_input = self.query_one("#folder-input", Input)
+        value = folder_input.value.strip()
+        location = Path(value if value else ".")
+
+        if location.is_file():
+            location = location.parent
+
+        while not location.exists() and location != location.parent:
+            location = location.parent
+
+        if not location.exists():
+            location = Path(".")
+
+        if path := await self.app.push_screen_wait(SelectDirectory(location=location)):
+            folder_input.value = str(path)
+
+    @on(Button.Pressed, "#save-btn")
+    def action_save(self) -> None:
+        """Dismiss with the selected folder."""
+        folder_input = self.query_one("#folder-input", Input)
+        value = folder_input.value.strip()
+        path = Path(value) if value else None
+
+        if not path or not path.is_dir():
+            folder_input.add_class("-invalid")
+            self.notify("Please enter a valid folder path.", severity="error")
+            return
+
+        self.dismiss(path)
+
+    @on(Button.Pressed, "#cancel-btn")
+    def action_cancel(self) -> None:
+        """Handle cancellation (button or escape key)."""
         self.dismiss(None)

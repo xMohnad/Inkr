@@ -5,6 +5,8 @@ description = "A tool for managing MKV files"
 authors = [{ name = "xMohnad" }]
 
 dependencies = [
+  "fonttools>=4.63.0",
+  "platformdirs>=4.11.0",
   "pymkv2>=2.1.1",
   "textual>=2.1.2",
   "textual_fspicker>=0.4.1",

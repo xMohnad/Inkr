@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from pymkv import MKVAttachment, MKVTrack
     from rich.console import RenderableType
     from textual.binding import BindingType
+    from textual.widget import AwaitMount
 
     from pyinkr.main import Inkr
     from pyinkr.services import MkvService
@@ -73,12 +74,9 @@ class ChecklistView(ListView, Generic[ItemT]):
         """Return a ListItem representation of `item`."""
         return ListItem(Checkbox(self.formatted_text(item), True))
 
-    async def add_item(self, item: ItemT) -> None:
+    def add_item(self, item: ItemT) -> AwaitMount:
         """Append `item` to the list and select it."""
-        await self.append(self.list_item(item))
-        self.loading = False
-        self.index = len(self) - 1
-        self.focus()
+        return self.append(self.list_item(item))
 
     @property
     def checkbox(self) -> "Checkbox":
@@ -151,6 +149,7 @@ class ListTrack(ChecklistView["MKVTrack"]):
             self.app.call_from_thread(setattr, self, "loading", True)
             track = self.mkv.add_track(path)
             self.app.call_from_thread(self.add_item, track)
+            self.app.call_from_thread(setattr, self, "loading", False)
 
     async def action_toggle_default(self) -> None:
         """Toggle the default flag on the selected track."""
@@ -250,7 +249,7 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
         """Add a new attachment from a file."""
         if path := await self.app.push_screen_wait(FileOpen()):
             attachment = self.mkv.add_attachment(path)
-            await self.add_item(attachment)
+            self.add_item(attachment)
 
     def action_edit_name(self) -> None:
         """Edit the attachment name."""
