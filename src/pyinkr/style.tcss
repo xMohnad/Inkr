@@ -145,10 +145,6 @@ FontsScreen {
     #fonts-table {
       height: 1fr;
     }
-
-    Center {
-      height: 1fr;
-    }
   }
 }
 

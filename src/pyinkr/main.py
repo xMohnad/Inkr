@@ -31,8 +31,7 @@ class Inkr(App[None]):
     @work(exclusive=True)
     async def on_mount(self) -> None:
         """Prompt for an MKV file to open, then show the manager screen."""
-        manager, path = await self.push_screen_wait(OpenScreen())
-        self.mkv = MkvService(manager, path)
+        self.mkv = await self.push_screen_wait(OpenScreen())
         self.push_screen(MkvManagScreen())
 
     @work(exclusive=True)

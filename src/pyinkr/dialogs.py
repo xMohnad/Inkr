@@ -9,12 +9,11 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Container, Horizontal, Middle
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Footer, Header, Input, ProgressBar, Static
+from textual.widgets import Button, DataTable, Footer, Header, Input, Label, ProgressBar, Static
 from textual_fspicker import SelectDirectory
 from typing_extensions import override
 
 from pyinkr import fonts
-from pyinkr.decorators import catch_errors
 
 if TYPE_CHECKING:
     from typing import ClassVar
@@ -45,7 +44,7 @@ class EditScreen(ModalScreen[str | None]):
         self._placeholder: str = placeholder
 
     @override
-    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
+    def compose(self) -> ComposeResult:
         yield Header()
         with Container() as container:
             container.border_title = self._title
@@ -99,7 +98,7 @@ class DelayScreen(ModalScreen[int | None]):
         self._title: str = title
 
     @override
-    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
+    def compose(self) -> ComposeResult:
         yield Header()
         with Container() as container:
             container.border_title = self._title
@@ -172,7 +171,7 @@ class ProgressBarScreen(ModalScreen[None]):
         self._total: float = 100.0
 
     @override
-    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
+    def compose(self) -> ComposeResult:
         yield Header()
         with Container() as container:
             container.border_title = self._title
@@ -185,12 +184,6 @@ class ProgressBarScreen(ModalScreen[None]):
     def progress_bar(self) -> ProgressBar:
         """Return the ProgressBar widget from the current screen."""
         return self.query_one(ProgressBar)
-
-    def update(self, progress: int) -> None:
-        """Update the progress bar, dismissing the screen once `progress` reaches the total."""
-        self.progress_bar.update(progress=progress)
-        if progress >= self._total:
-            self.dismiss(None)
 
 
 class FontsScreen(ModalScreen[None]):
@@ -218,7 +211,7 @@ class FontsScreen(ModalScreen[None]):
         self._usages: list[fonts.FontUsage] = sorted(info.usages, key=lambda u: (u.name.lower(), u.weight, u.italic))
 
     @override
-    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
+    def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="fonts-container") as container:
             container.border_title = self._title
@@ -230,7 +223,7 @@ class FontsScreen(ModalScreen[None]):
             else:
                 with Center():
                     with Middle():
-                        yield Static("No fonts found in this subtitle.")
+                        yield Label("No fonts found in this subtitle.")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -250,12 +243,8 @@ class FontsScreen(ModalScreen[None]):
         return Text(", ".join(parts), style="bold yellow")
 
     @work(exclusive=True)
-    @catch_errors(severity="warning")
     async def action_import_fonts(self) -> None:
         """Import every font this subtitle needs."""
-        if not (self.app.font_faces and self._usages):
-            return
-
         from pyinkr.widgets import ListAttachment
 
         list_view = self.app.screen_stack[-2].query_one(ListAttachment)
@@ -277,6 +266,14 @@ class FontsScreen(ModalScreen[None]):
                 list_view.add_item(a)
 
             table.update_cell(str(i), "status", status, update_width=True)
+
+    @override
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Check if an action may run."""
+        if action != "close" and not (self.app.font_faces and self._usages):
+            return None
+
+        return True
 
     def action_close(self) -> None:
         """Close the screen."""
@@ -308,7 +305,7 @@ class PickFolderScreen(ModalScreen[Path | None]):
         self._placeholder: str = placeholder
 
     @override
-    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
+    def compose(self) -> ComposeResult:
         yield Header()
         with Container() as container:
             container.border_title = self._title
