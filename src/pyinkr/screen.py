@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -7,7 +8,6 @@ from pymkv import MKVFile
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import Checkbox, Footer, Header, TabbedContent, TabPane
 from textual_fspicker import FileOpen, FileSave
@@ -21,12 +21,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from textual.binding import BindingType
-    from textual.reactive import Reactive
 
     from pyinkr.main import Inkr
 
 
-class OpenScreen(Screen[tuple[MKVFile, Path]]):
+class OpenScreen(Screen[MkvService]):
     """Screen for selecting and opening an MKV file."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -34,38 +33,27 @@ class OpenScreen(Screen[tuple[MKVFile, Path]]):
         Binding("escape", "back", "Back", tooltip="Back To Opened MKV"),
     ]
 
-    path: reactive[Path] = reactive(Path(), init=False)
     app: Inkr
-    loading: Reactive[bool]
 
     @override
-    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
+    def compose(self) -> ComposeResult:
         yield Header()
         yield NoticeWidget()
         yield Footer()
 
     @work(exclusive=True, thread=True)
-    async def watch_path(self, path: Path) -> None:
-        """Open the MKV file at the given path."""
-        try:
-            manager = MKVFile(path)
-            self.app.call_from_thread(self.dismiss, (manager, path))
-        except Exception as e:
-            self.app.call_from_thread(
-                self.notify,
-                f"Couldn't open '{path.name}': {e}",
-                title="Open Failed",
-                severity="error",
-            )
-        finally:
-            self.app.call_from_thread(setattr, self, "loading", False)
-
-    @work(exclusive=True)
     async def action_open(self) -> None:
         """Prompt the user to choose an MKV file to open."""
-        if path := await self.app.push_screen_wait(FileOpen()):
-            self.loading = True
-            self.path = path
+        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
+            self.app.call_from_thread(setattr, self, "loading", True)
+            try:
+                assert isinstance(path, Path)
+                manager = MKVFile(path)
+                self.app.call_from_thread(self.dismiss, MkvService(manager, path))
+            except ValueError as e:
+                self.notify(str(e), title="Open Failed", severity="error")
+            finally:
+                self.app.call_from_thread(setattr, self, "loading", False)
 
     async def action_back(self) -> None:
         """Return to the manager screen if an MKV file is already open."""
@@ -85,7 +73,8 @@ class MkvManagScreen(Screen[None]):
     app: Inkr
 
     @override
-    def compose(self) -> ComposeResult:  # noqa: D102 (pure yield chain, no non-obvious behavior)
+    def compose(self) -> ComposeResult:
+        self.sub_title = self.app.mkv.path.name
         yield Header()
         # TODO: Add a tab for chapters
         with TabbedContent(initial="info-tab", id="tabs"):
@@ -97,26 +86,12 @@ class MkvManagScreen(Screen[None]):
                 yield ListAttachment(id="attachment")
         yield Footer()
 
-    def on_mount(self) -> None:
-        """Set the screen's subtitle when mounted."""
-        self._refresh_title()
-
-    def _refresh_title(self) -> None:
-        """Update the subtitle to the current MKV file name."""
-        self.sub_title = self.app.mkv.path.name
-
     @work(exclusive=True)
     async def action_back_to_open(self) -> None:
         """Return to the open screen and load a new MKV file."""
-        focused_id = "#info"  # Default to info tab
-        if (focused := self.focused) and self.focused.id:
-            focused_id = f"#{focused.id}"
-
-        manager, path = await self.app.push_screen_wait(OpenScreen())
-        self.app.mkv = MkvService(manager, path)
+        # TODO: remember focused widget
+        self.app.mkv = await self.app.push_screen_wait(OpenScreen())
         self.refresh(layout=True, recompose=True)
-        self._refresh_title()
-        self.query_one(focused_id).focus()
 
     @staticmethod
     def _indices_to_remove(checkboxes: Iterable[Checkbox]) -> list[int]:
@@ -126,36 +101,33 @@ class MkvManagScreen(Screen[None]):
     @work(exclusive=True)
     async def action_save(self) -> None:
         """Save the MKV file, applying track and attachment selections."""
-        if save_path := await self.app.push_screen_wait(FileSave(default_file=self.app.mkv.path, can_overwrite=False)):
-            for i in self._indices_to_remove(self.query_one(ListTrack).query(Checkbox)):
-                self.app.mkv.remove_track(i)
+        if not (
+            save_path := await self.app.push_screen_wait(FileSave(default_file=self.app.mkv.path, can_overwrite=False))
+        ):
+            return
 
-            for i in self._indices_to_remove(self.query_one(ListAttachment).query(Checkbox)):
-                self.app.mkv.remove_attachment(i)
+        mkv = copy.deepcopy(self.app.mkv.manager)
+        for i in self._indices_to_remove(self.query_one(ListTrack).query(Checkbox)):
+            mkv.remove_track(i)
 
+        if not mkv.tracks:
+            self.notify("The video must contain at least one track.", title="Missing Tracks", severity="error")
+            return
+
+        for i in self._indices_to_remove(self.query_one(ListAttachment).query(Checkbox)):
+            mkv.remove_attachment(i)
+
+        screen = ProgressBarScreen(f"Saving {save_path.name}...")
+        self.app.push_screen(screen)
+
+        def _run_mux() -> None:
             try:
-                self.app.push_screen(ProgressBarScreen(f"Saving {save_path.name}..."))
-                self._mux(save_path)
-            except Exception as e:
-                self.notify(f"Save failed: {e}", title="Save Failed", severity="error")
-                screens = self.app.screen_stack
-                if screens and isinstance(screens[-1], ProgressBarScreen):
-                    self.app.pop_screen()
+                updater = lambda v: self.app.call_from_thread(screen.progress_bar.update, progress=v)
+                mkv.mux(save_path, progress_handler=updater)
+                self.notify(f"Saved to {save_path.name}", title="Success")
+            except ValueError as e:
+                self.notify(str(e), title="Save Failed", severity="error")
+            finally:
+                self.app.call_from_thread(self.app.pop_screen)
 
-    @work(exclusive=True, thread=True)
-    async def _mux(self, save_path: Path) -> None:
-        """Mux and write the MKV file."""
-
-        def update(progress: int) -> None:
-            """Forward mux progress to the active ProgressBarScreen."""
-            screen = self.app.screen_stack[-1]
-            if isinstance(screen, ProgressBarScreen):
-                self.app.call_from_thread(screen.update, progress)
-
-        self.app.mkv.mux(save_path, progress_handler=update)
-        self.app.call_from_thread(
-            self.notify,
-            f"Saved to {save_path.name}",
-            title="Success",
-            severity="information",
-        )
+        self.app.run_worker(_run_mux, thread=True)

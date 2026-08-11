@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 import msgspec
-from pymkv.models import MkvMergeOutput
 from rich.text import Text
 from textual import work
 from textual.binding import Binding
@@ -16,14 +14,16 @@ from textual_fspicker import FileOpen
 from typing_extensions import override
 
 from pyinkr import fonts
-from pyinkr.decorators import catch_errors
 from pyinkr.dialogs import DelayScreen, EditScreen, FontsScreen
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from typing import ClassVar
 
     from pymkv import MKVAttachment, MKVTrack
+    from pymkv.models import MkvMergeOutput
     from rich.console import RenderableType
+    from textual.app import ComposeResult
     from textual.binding import BindingType
     from textual.widget import AwaitMount
 
@@ -40,16 +40,21 @@ class ChecklistView(ListView, Generic[ItemT]):
     app: Inkr
 
     BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("a", "add", "Add"),
         Binding("enter,space", "toggle_button", "Toggle", show=False),
     ]
 
-    @work(exclusive=True)
-    async def on_mount(self) -> None:
-        """Load items when mounted."""
-        items = self.items
-        async with self.batch():
-            await self.extend([self.list_item(item) for item in items])
-        self.index = 0 if items else None
+    @override
+    def compose(self) -> ComposeResult:
+        for item in self.items:
+            yield self.list_item(item)
+
+    @override
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Check if an action may run."""
+        if action != "add" and self.is_empty:
+            return False
+        return True
 
     @property
     def mkv(self) -> "MkvService":
@@ -81,51 +86,53 @@ class ChecklistView(ListView, Generic[ItemT]):
     @property
     def checkbox(self) -> "Checkbox":
         """Return the Checkbox widget for the currently selected item."""
-        if self.index is None:
-            raise ValueError("No item is currently selected.")
+        assert self.index is not None
         return self.children[self.index].query_one(Checkbox)
 
     @property
     def item(self) -> ItemT:
         """Return the currently selected domain object."""
-        if self.index is None:
-            raise ValueError("No item is currently selected.")
+        assert self.index is not None
         return self.items[self.index]
 
-    @catch_errors()
-    async def action_toggle_button(self) -> None:
+    def action_toggle_button(self) -> None:
         """Toggle selection state of the current item."""
         self.checkbox.toggle()
 
     @work(exclusive=True)
-    @catch_errors()
-    async def edit_field(
+    async def action_edit(
         self,
-        *,
         field: str,
-        placeholder: str,
-        attr: str,
+        attr: str | None = None,
+        placeholder: str | None = None,
     ) -> None:
         """Shared flow for editing a single string field on the selected item."""
+        if placeholder is None:
+            placeholder = f"Enter {field}..."
+        if attr is None:
+            attr = field
         item = self.item
-        title = f"Edit {field} — {self.label(item)}"
-        if value := await self.app.push_screen_wait(EditScreen(getattr(item, attr), title, placeholder)):
-            setattr(item, attr, value)
-            self.checkbox.label = self.formatted_text(item)
+        title = f"Edit {field.capitalize()} — {self.label(item)}"
+        value = await self.app.push_screen_wait(EditScreen(getattr(item, attr), title, placeholder))
+        if value is not None:
+            try:
+                setattr(item, attr, value)
+                self.checkbox.label = self.formatted_text(item)
+            except ValueError as e:
+                self.notify(str(e), severity="error")
 
 
 class ListTrack(ChecklistView["MKVTrack"]):
     """List of MKV tracks."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("a", "add_track", "Add"),
-        Binding("n", "edit_name", "Name"),
-        Binding("l", "edit_lang", "Lang"),
+        Binding("n", "edit('name', 'track_name')", "Name"),
+        Binding("l", "edit('language')", "Lang"),
         Binding("y", "edit_delay", "Delay"),
         Binding("d", "toggle_default", "Toggle Default"),
         Binding("f", "check_fonts", "Fonts"),
-        Binding("alt+up", "move_up", "Move Up", show=False),
-        Binding("alt+down", "move_down", "Move Down", show=False),
+        Binding("alt+up", "move_track(-1)", "Move Up", show=False),
+        Binding("alt+down", "move_track(1)", "Move Down", show=False),
     ]
 
     @property
@@ -142,31 +149,26 @@ class ListTrack(ChecklistView["MKVTrack"]):
         return f"{kind}: {name.strip()}"
 
     @work(exclusive=True, thread=True)
-    @catch_errors()
-    async def action_add_track(self) -> None:
+    async def action_add(self) -> None:
         """Add a new track from a file."""
-        if path := self.app.call_from_thread(lambda: self.app.push_screen_wait(FileOpen())):
+        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
             self.app.call_from_thread(setattr, self, "loading", True)
-            track = self.mkv.add_track(path)
-            self.app.call_from_thread(self.add_item, track)
-            self.app.call_from_thread(setattr, self, "loading", False)
+            try:
+                assert isinstance(path, Path)
+                track = self.mkv.add_track(path)
+                self.app.call_from_thread(self.add_item, track)
+            except ValueError as e:
+                self.notify(str(e), severity="error")
+            finally:
+                self.app.call_from_thread(setattr, self, "loading", False)
 
-    async def action_toggle_default(self) -> None:
+    def action_toggle_default(self) -> None:
         """Toggle the default flag on the selected track."""
         track = self.item
         track.default_track = not track.default_track
         self.checkbox.label = self.formatted_text(track)
 
-    def action_edit_name(self) -> None:
-        """Edit the track name."""
-        self.edit_field(field="Name", placeholder="Enter name...", attr="track_name")
-
-    def action_edit_lang(self) -> None:
-        """Edit the track language."""
-        self.edit_field(field="Language", placeholder="Enter language...", attr="language")
-
     @work(exclusive=True)
-    @catch_errors()
     async def action_edit_delay(self) -> None:
         """Edit the track sync delay."""
         track = self.item
@@ -178,7 +180,6 @@ class ListTrack(ChecklistView["MKVTrack"]):
             self.checkbox.label = self.formatted_text(track)
 
     @work(exclusive=True, thread=True)
-    @catch_errors(severity="warning")
     async def action_check_fonts(self) -> None:
         """Show the fonts required by the selected subtitle track."""
         track = self.item
@@ -189,22 +190,27 @@ class ListTrack(ChecklistView["MKVTrack"]):
                 self.app.push_screen,
                 FontsScreen(info, title=f"Fonts — {self.label(track)}"),
             )
+        except ValueError as e:
+            self.notify(str(e), severity="warning")
         finally:
             self.app.call_from_thread(setattr, self, "loading", False)
 
-    async def action_move_up(self) -> None:
-        """Move the selected track up."""
-        if self.index is not None and self.index > 0:
-            self.mkv.move_track_up(self.index)
-            self.move_child(self.index, before=self.index - 1)
-            self.index -= 1
+    def action_move_track(self, delta: int) -> None:
+        """Move the selected track by `delta` positions."""
+        index = self.index
+        if index is None:
+            return
 
-    async def action_move_down(self) -> None:
-        """Move the selected track down."""
-        if self.index is not None and self.index < len(self.mkv.tracks) - 1:
-            self.mkv.move_track_down(self.index)
-            self.move_child(self.index, after=self.index + 1)
-            self.index += 1
+        new_index = index + delta
+        if 0 <= new_index < len(self):
+            if delta < 0:
+                self.mkv.move_track_up(index)
+                self.move_child(index, before=new_index)
+            else:
+                self.mkv.move_track_down(index)
+                self.move_child(index, after=new_index)
+
+            self.index = new_index
 
     @override
     def formatted_text(self, item: "MKVTrack") -> Text:
@@ -227,9 +233,8 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
     """List of MKV attachments."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("a", "add_attachment", "Add"),
-        Binding("n", "edit_name", "Name"),
-        Binding("e", "edit_description", "Description"),
+        Binding("n", "edit('name')", "Name"),
+        Binding("e", "edit('description')", "Description"),
     ]
 
     @property
@@ -244,20 +249,11 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
         return item.name or Path(item.file_path).name
 
     @work(exclusive=True)
-    @catch_errors()
-    async def action_add_attachment(self) -> None:
+    async def action_add(self) -> None:
         """Add a new attachment from a file."""
         if path := await self.app.push_screen_wait(FileOpen()):
             attachment = self.mkv.add_attachment(path)
             self.add_item(attachment)
-
-    def action_edit_name(self) -> None:
-        """Edit the attachment name."""
-        self.edit_field(field="Name", placeholder="Enter name...", attr="name")
-
-    def action_edit_description(self) -> None:
-        """Edit the attachment description."""
-        self.edit_field(field="Description", placeholder="Enter description...", attr="description")
 
     @override
     def formatted_text(self, item: "MKVAttachment") -> Text:
@@ -286,7 +282,7 @@ class InfoTree(Tree[None]):
     app: Inkr
     info: reactive[MkvMergeOutput | None] = reactive(None)
 
-    async def watch_info(self, info: MkvMergeOutput | None) -> None:
+    def watch_info(self, info: MkvMergeOutput | None) -> None:
         """Update the tree when info changes."""
 
         if info:
@@ -295,14 +291,14 @@ class InfoTree(Tree[None]):
             self.info = self.app.mkv.info_json
 
     @work(exclusive=True)
-    @catch_errors()
     async def action_edit_title(self) -> None:
         """Edit the MKV container title."""
-        if title := await self.app.push_screen_wait(
-            EditScreen(self.app.mkv.title, "Edit MKV Title", "Enter new title...")
-        ):
-            self.app.mkv.title = title
-            self.notify(f"Title updated: {title}", title="Title Updated", severity="information")
+        mkv = self.app.mkv.manager
+        title = await self.app.push_screen_wait(
+            EditScreen(mkv.title, "Edit MKV Title", "Enter title..."),
+        )
+        if title is not None:
+            mkv.title = title
 
 
 class NoticeWidget(Widget):
@@ -314,5 +310,5 @@ class NoticeWidget(Widget):
     """Widget's children may receive focus."""
 
     @override
-    def render(self) -> RenderableType:  # noqa: D102 (pure yield/return, no non-obvious behavior)
+    def render(self) -> RenderableType:
         return "Press [bold green]o[/] to open a file"
