@@ -60,26 +60,8 @@ inkr = "pyinkr.main:main"
 line-length = 120
 
 [tool.ruff.lint]
-# D1xx: missing-docstring rules. D100 (missing docstring in public module)
-# is intentionally excluded — module-level docstrings aren't required.
-# Private names (leading underscore) are excluded by pydocstyle by
-# default, matching this project's convention that internal helper
-# methods don't require docstrings.
-# D401: docstrings should start with an imperative verb ("Return the...",
-# not "Returns the...").
-select = [
-  "F401",
-  "D101",
-  "D102",
-  "D103",
-  "D104",
-  "D105",
-  "D106",
-  "D107",
-  "D401",
-  "D419",
-  "I",
-]
+select = ["D", "F", "I", "B", "UP", "ISC", "TC", "SIM"]
+ignore = ["D100"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

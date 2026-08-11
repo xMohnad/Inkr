@@ -11,7 +11,7 @@ from platformdirs import user_config_dir
 
 @dataclass(slots=True)
 class Settings:
-    """User-configurable application settings"""
+    """User-configurable application settings."""
 
     theme: str = "tokyo-night"
     fonts_folder: str | None = None

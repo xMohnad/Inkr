@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 from rich.text import Text
 from textual import on, work
-from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Container, Horizontal, Middle
 from textual.screen import ModalScreen
@@ -18,6 +17,7 @@ from pyinkr import fonts
 if TYPE_CHECKING:
     from typing import ClassVar
 
+    from textual.app import ComposeResult
     from textual.binding import BindingType
 
     from pyinkr.main import Inkr
@@ -113,7 +113,7 @@ class DelayScreen(ModalScreen[int | None]):
 
     @staticmethod
     def _format(delay_ms: int) -> str:
-        """Format a millisecond delay as seconds, e.g. `250` -> `\"0.25\"`."""
+        r"""Format a millisecond delay as seconds, e.g. `250` -> `"0.25"`."""
         return f"{delay_ms / 1000:.2f}"
 
     def _current_ms(self) -> int:
@@ -175,9 +175,8 @@ class ProgressBarScreen(ModalScreen[None]):
         yield Header()
         with Container() as container:
             container.border_title = self._title
-            with Center():
-                with Middle():
-                    yield ProgressBar(total=self._total)
+            with Center(), Middle():
+                yield ProgressBar(total=self._total)
         yield Footer()
 
     @property
@@ -221,9 +220,8 @@ class FontsScreen(ModalScreen[None]):
             if self._usages:
                 yield DataTable(id="fonts-table", cursor_type="row", zebra_stripes=True)
             else:
-                with Center():
-                    with Middle():
-                        yield Label("No fonts found in this subtitle.")
+                with Center(), Middle():
+                    yield Label("No fonts found in this subtitle.")
         yield Footer()
 
     def on_mount(self) -> None:
