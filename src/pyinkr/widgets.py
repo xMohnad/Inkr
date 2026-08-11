@@ -52,12 +52,10 @@ class ChecklistView(ListView, Generic[ItemT]):
     @override
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         """Check if an action may run."""
-        if action != "add" and self.is_empty:
-            return False
-        return True
+        return action == "add" or not self.is_empty
 
     @property
-    def mkv(self) -> "MkvService":
+    def mkv(self) -> MkvService:
         """Return the application's MKV service."""
         return self.app.mkv
 
@@ -84,7 +82,7 @@ class ChecklistView(ListView, Generic[ItemT]):
         return self.append(self.list_item(item))
 
     @property
-    def checkbox(self) -> "Checkbox":
+    def checkbox(self) -> Checkbox:
         """Return the Checkbox widget for the currently selected item."""
         assert self.index is not None
         return self.children[self.index].query_one(Checkbox)
@@ -137,12 +135,12 @@ class ListTrack(ChecklistView["MKVTrack"]):
 
     @property
     @override
-    def items(self) -> Sequence["MKVTrack"]:
+    def items(self) -> Sequence[MKVTrack]:
         return self.mkv.tracks
 
     @staticmethod
     @override
-    def label(item: "MKVTrack") -> str:
+    def label(item: MKVTrack) -> str:
         """Build a short human label used to identify a track in dialog titles."""
         kind = (item.track_type or "track").capitalize()
         name = item.track_name or "Unnamed"
@@ -213,7 +211,7 @@ class ListTrack(ChecklistView["MKVTrack"]):
             self.index = new_index
 
     @override
-    def formatted_text(self, item: "MKVTrack") -> Text:
+    def formatted_text(self, item: MKVTrack) -> Text:
         """Return formatted text for display in a Checkbox."""
         name = item.track_name or "Unnamed"
         lang = item.language or "und"
@@ -239,12 +237,12 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
 
     @property
     @override
-    def items(self) -> Sequence["MKVAttachment"]:
+    def items(self) -> Sequence[MKVAttachment]:
         return self.mkv.attachments
 
     @staticmethod
     @override
-    def label(item: "MKVAttachment") -> str:
+    def label(item: MKVAttachment) -> str:
         """Build a short human label used to identify an attachment in dialog titles."""
         return item.name or Path(item.file_path).name
 
@@ -256,7 +254,7 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
             self.add_item(attachment)
 
     @override
-    def formatted_text(self, item: "MKVAttachment") -> Text:
+    def formatted_text(self, item: MKVAttachment) -> Text:
         """Return formatted text for display in the list."""
         name = self.label(item)
         mime = item.mime_type or "?"
@@ -284,7 +282,6 @@ class InfoTree(Tree[None]):
 
     def watch_info(self, info: MkvMergeOutput | None) -> None:
         """Update the tree when info changes."""
-
         if info:
             self.add_json(msgspec.to_builtins(info))
         else:

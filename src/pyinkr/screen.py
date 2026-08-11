@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pymkv import MKVFile
 from textual import work
-from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Checkbox, Footer, Header, TabbedContent, TabPane
@@ -20,6 +19,7 @@ from pyinkr.widgets import InfoTree, ListAttachment, ListTrack, NoticeWidget
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from textual.app import ComposeResult
     from textual.binding import BindingType
 
     from pyinkr.main import Inkr

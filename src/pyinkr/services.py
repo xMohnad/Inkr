@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 class MkvService:
     """Thin domain-layer wrapper around `pymkv.MKVFile`."""
 
-    def __init__(self, manager: MKVFile, path: Path) -> None:  # noqa: D107 (trivial attribute assignment)
+    def __init__(self, manager: MKVFile, path: Path) -> None:
+        """Wrap an already-loaded MKVFile; caller owns its lifecycle."""
         self.manager: MKVFile = manager
         self.path: Path = path
 

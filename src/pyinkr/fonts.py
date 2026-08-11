@@ -64,7 +64,7 @@ def _normalize_font_name(name: str) -> str:
 
 
 def _parse_weight(value: str) -> int:
-    """Parse a \\b tag value into an OS/2-style weight (100-900)."""
+    r"""Parse a \b tag value into an OS/2-style weight (100-900)."""
     try:
         val = round(float(value))
     except ValueError:
@@ -168,12 +168,11 @@ def _parse_ass_minimal(lines: Iterable[str]) -> _ParsedAss:
                 )
             continue
 
-        if section == "[events]":
-            if prefix.startswith("dialogue:"):
-                parts = line.split(":", 1)[1].split(",", 9)
-                if len(parts) < 10:
-                    continue
-                dialogue_lines.append(_DialogueLine(parts[3].strip(), parts[9]))
+        if section == "[events]" and prefix.startswith("dialogue:"):
+            parts = line.split(":", 1)[1].split(",", 9)
+            if len(parts) < 10:
+                continue
+            dialogue_lines.append(_DialogueLine(parts[3].strip(), parts[9]))
 
     return _ParsedAss(styles, dialogue_lines, has_fonts_section)
 
@@ -193,7 +192,7 @@ _OVERRIDE_BLOCK_RE = re.compile(r"\{([^}]*)\}")
 
 
 def _iter_tags(block: str) -> Iterator[tuple[str, str]]:
-    """Yield (tag, value) for every \\fn/\\r/\\i/\\b override in a {...} block, in order."""
+    r"""Yield (tag, value) for every \fn/\r/\i/\b override in a {...} block, in order."""
     # Strip parens (\t(...), \pos(...), \clip(...) with huge point lists) first.
     # Skip the substitution if there's no '(' -- most blocks don't have one.
     if "(" in block:
@@ -206,9 +205,9 @@ def _iter_tags(block: str) -> Iterator[tuple[str, str]]:
 
 
 def _extract_font_usages(styles: dict[str, FontUsage], dialogue_lines: list[_DialogueLine]) -> set[FontUsage]:
-    """Walk every dialogue line and collect every distinct font/weight/italic combo used.
+    r"""Walk every dialogue line and collect every distinct font/weight/italic combo used.
 
-    Limitation: font changes inside \\t(...) animated transforms aren't tracked.
+    Limitation: font changes inside \t(...) animated transforms aren't tracked.
     """
     default_style = styles.get("Default") or next(iter(styles.values()), None)
     usages: set[FontUsage] = set()
@@ -262,9 +261,9 @@ def _read_font_faces(path: Path) -> list[FontFile]:
         names: set[str] = set()
         with suppress(Exception):
             for record in tt["name"].names:
-                if record.nameID in (1, 4, 16):  # Family, Full name, Typographic family
-                    if n := record.toUnicode().strip():
-                        names.add(n.lower())
+                # IDs: Family, Full name, Typographic family
+                if record.nameID in (1, 4, 16) and (n := record.toUnicode().strip()):
+                    names.add(n.lower())
 
         weight, italic = 400, False
         if "OS/2" in tt:

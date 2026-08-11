@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, override
 
 from textual import work
@@ -9,14 +8,16 @@ from textual.app import App, SystemCommand
 from pyinkr import fonts
 from pyinkr.dialogs import PickFolderScreen
 from pyinkr.screen import MkvManagScreen, OpenScreen
-from pyinkr.services import MkvService
 from pyinkr.settings import Settings
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from pathlib import Path
 
     from textual.screen import Screen
     from textual.types import CSSPathType
+
+    from pyinkr.services import MkvService
 
 
 class Inkr(App[None]):
