@@ -1,6 +1,6 @@
 [project]
 name = "pyinkr"
-version = "0.3.0"
+version = "0.3.1"
 description = "A tool for managing MKV files"
 authors = [{ name = "xMohnad" }]
 
