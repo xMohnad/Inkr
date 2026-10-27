@@ -56,7 +56,7 @@ class Inkr(App[None]):
         )
         yield from super().get_system_commands(screen)
 
-    @work(exclusive=True, thread=True)
+    @work(thread=True)
     def scan_font_faces(self, directory: Path) -> None:
         """Scan `directory` for font faces."""
         self.font_faces = fonts.scan_font_faces(directory)
