@@ -89,9 +89,12 @@ class MkvManagScreen(Screen[None]):
     @work(exclusive=True)
     async def action_back_to_open(self) -> None:
         """Return to the open screen and load a new MKV file."""
-        # TODO: remember focused widget
         self.app.mkv = await self.app.push_screen_wait(OpenScreen())
-        self.refresh(layout=True, recompose=True)
+        id = "info"
+        if focused := self.focused:
+            id = focused.id or id
+        await self.recompose()
+        self.query_one(f"#{id}").focus()
 
     @staticmethod
     def _indices_to_remove(checkboxes: Iterable[Checkbox]) -> list[int]:
