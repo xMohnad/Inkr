@@ -35,7 +35,7 @@ class Inkr(App[None]):
         self.mkv = await self.push_screen_wait(OpenScreen())
         self.push_screen(MkvManagScreen())
 
-    @work(exclusive=True)
+    @work
     async def action_fonts_folder(self) -> None:
         """Pick fonts folder."""
         if path := await self.push_screen_wait(

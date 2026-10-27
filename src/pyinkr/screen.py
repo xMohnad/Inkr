@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from pymkv import MKVFile
@@ -9,6 +8,7 @@ from textual import work
 from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Checkbox, Footer, Header, TabbedContent, TabPane
+from textual.worker import WorkerFailed
 from textual_fspicker import FileOpen, FileSave
 from typing_extensions import override
 
@@ -41,19 +41,18 @@ class OpenScreen(Screen[MkvService]):
         yield NoticeWidget()
         yield Footer()
 
-    @work(exclusive=True, thread=True)
+    @work(exclusive=True)
     async def action_open(self) -> None:
         """Prompt the user to choose an MKV file to open."""
-        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
-            self.app.call_from_thread(setattr, self, "loading", True)
+        if path := await self.app.push_screen_wait(FileOpen()):
+            self.loading = True
             try:
-                assert isinstance(path, Path)
-                manager = MKVFile(path)
-                self.app.call_from_thread(self.dismiss, MkvService(manager, path))
-            except ValueError as e:
-                self.notify(str(e), title="Open Failed", severity="error")
+                manager = await self.run_worker(lambda: MKVFile(path), thread=True, exit_on_error=False).wait()
+                self.dismiss(MkvService(manager, path))
+            except WorkerFailed as e:
+                self.notify(str(e.error), title="Open Failed", severity="error")
             finally:
-                self.app.call_from_thread(setattr, self, "loading", False)
+                self.loading = False
 
     async def action_back(self) -> None:
         """Return to the manager screen if an MKV file is already open."""
@@ -120,14 +119,13 @@ class MkvManagScreen(Screen[None]):
         screen = ProgressBarScreen(f"Saving {save_path.name}...")
         self.app.push_screen(screen)
 
-        def _run_mux() -> None:
-            try:
-                updater = lambda v: self.app.call_from_thread(screen.progress_bar.update, progress=v)
-                mkv.mux(save_path, progress_handler=updater)
-                self.notify(f"Saved to {save_path.name}", title="Success")
-            except ValueError as e:
-                self.notify(str(e), title="Save Failed", severity="error")
-            finally:
-                self.app.call_from_thread(self.app.pop_screen)
-
-        self.app.run_worker(_run_mux, thread=True)
+        try:
+            updater = lambda v: self.app.call_from_thread(screen.progress_bar.update, progress=v)
+            await self.app.run_worker(
+                lambda: mkv.mux(save_path, progress_handler=updater), thread=True, exit_on_error=False
+            ).wait()
+            self.notify(f"Saved to {save_path.name}", title="Success")
+        except WorkerFailed as e:
+            self.notify(str(e.error), title="Save Failed", severity="error")
+        finally:
+            self.app.pop_screen()

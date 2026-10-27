@@ -10,6 +10,7 @@ from textual.binding import Binding
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Checkbox, ListItem, ListView, Tree
+from textual.worker import WorkerFailed
 from textual_fspicker import FileOpen
 from typing_extensions import override
 
@@ -146,19 +147,18 @@ class ListTrack(ChecklistView["MKVTrack"]):
         name = item.track_name or "Unnamed"
         return f"{kind}: {name.strip()}"
 
-    @work(exclusive=True, thread=True)
+    @work(exclusive=True)
     async def action_add(self) -> None:
         """Add a new track from a file."""
-        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
-            self.app.call_from_thread(setattr, self, "loading", True)
+        if path := await self.app.push_screen_wait(FileOpen()):
+            self.loading = True
             try:
-                assert isinstance(path, Path)
-                track = self.mkv.add_track(path)
-                self.app.call_from_thread(self.add_item, track)
-            except ValueError as e:
-                self.notify(str(e), severity="error")
+                track = await self.run_worker(lambda: self.mkv.add_track(path), thread=True, exit_on_error=False).wait()
+                self.add_item(track)
+            except WorkerFailed as e:
+                self.notify(str(e.error), severity="error")
             finally:
-                self.app.call_from_thread(setattr, self, "loading", False)
+                self.loading = False
 
     def action_toggle_default(self) -> None:
         """Toggle the default flag on the selected track."""
@@ -177,21 +177,22 @@ class ListTrack(ChecklistView["MKVTrack"]):
             track.sync = result or None
             self.checkbox.label = self.formatted_text(track)
 
-    @work(exclusive=True, thread=True)
+    @work(exclusive=True)
     async def action_check_fonts(self) -> None:
         """Show the fonts required by the selected subtitle track."""
         track = self.item
-        self.app.call_from_thread(setattr, self, "loading", True)
+        self.loading = True
         try:
-            info = fonts.analyze_subtitle_fonts(track)
-            self.app.call_from_thread(
-                self.app.push_screen,
+            info = await self.run_worker(
+                lambda: fonts.analyze_subtitle_fonts(track), thread=True, exit_on_error=False
+            ).wait()
+            self.app.push_screen(
                 FontsScreen(info, title=f"Fonts — {self.label(track)}"),
             )
-        except ValueError as e:
-            self.notify(str(e), severity="warning")
+        except WorkerFailed as e:
+            self.notify(str(e.error), severity="warning")
         finally:
-            self.app.call_from_thread(setattr, self, "loading", False)
+            self.loading = False
 
     def action_move_track(self, delta: int) -> None:
         """Move the selected track by `delta` positions."""
