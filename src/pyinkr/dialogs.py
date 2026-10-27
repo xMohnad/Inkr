@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 class EditScreen(ModalScreen[str | None]):
     """A modal screen for editing information."""
 
-    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "cancel", "Cancel")]
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "dismiss(None)", "Cancel")]
 
     def __init__(
         self,
@@ -51,7 +51,7 @@ class EditScreen(ModalScreen[str | None]):
             yield Input(value=self._value, id="edit-input", placeholder=self._placeholder)
             with Horizontal():
                 yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn")
+                yield Button("Cancel", id="cancel-btn", action="dismiss(None)")
         yield Footer()
 
     @on(Button.Pressed, "#save-btn")
@@ -59,11 +59,6 @@ class EditScreen(ModalScreen[str | None]):
     def save_name(self) -> None:
         """Handle save button press - dismiss with the new value."""
         self.dismiss(self.query_one("#edit-input", Input).value.strip())
-
-    @on(Button.Pressed, "#cancel-btn")
-    def action_cancel(self) -> None:
-        """Handle cancellation (button or escape key)."""
-        self.dismiss(None)
 
 
 class DelayScreen(ModalScreen[int | None]):
@@ -75,7 +70,7 @@ class DelayScreen(ModalScreen[int | None]):
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("escape", "cancel", "Cancel"),
+        Binding("escape", "dismiss(None)", "Cancel"),
         Binding("plus,equals_sign,up", "increment", "+0.1s"),
         Binding("minus,down", "decrement", "-0.1s"),
         Binding("r", "reset", "Reset"),
@@ -108,7 +103,7 @@ class DelayScreen(ModalScreen[int | None]):
                 yield Button("+", id="inc-btn", tooltip="Increase (+, ↑)")
             with Horizontal(id="action-row"):
                 yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn")
+                yield Button("Cancel", id="cancel-btn", action="dismiss(None)")
         yield Footer()
 
     @staticmethod
@@ -149,11 +144,6 @@ class DelayScreen(ModalScreen[int | None]):
         """Handle save - dismiss with the delay in milliseconds."""
         self.dismiss(self._current_ms())
 
-    @on(Button.Pressed, "#cancel-btn")
-    def action_cancel(self) -> None:
-        """Handle cancellation (button or escape key)."""
-        self.dismiss(None)
-
 
 class ProgressBarScreen(ModalScreen[None]):
     """A modal screen showing progress for a long-running operation."""
@@ -189,7 +179,7 @@ class FontsScreen(ModalScreen[None]):
     """A modal screen listing the fonts a subtitle track needs."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("escape,enter,space", "close", "Close"),
+        Binding("escape", "dismiss(None)", "Close"),
         Binding("i", "import_fonts", "Import"),
     ]
 
@@ -268,21 +258,17 @@ class FontsScreen(ModalScreen[None]):
     @override
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         """Check if an action may run."""
-        if action != "close" and not (self.app.font_faces and self._usages):
+        if action != "dismiss" and not (self.app.font_faces and self._usages):
             return None
 
         return True
-
-    def action_close(self) -> None:
-        """Close the screen."""
-        self.dismiss(None)
 
 
 class PickFolderScreen(ModalScreen[Path | None]):
     """A modal screen for picking a folder."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("escape", "cancel", "Cancel"),
+        Binding("escape", "dismiss(None)", "Cancel"),
         Binding("s", "save", "Save"),
         Binding("p", "browse", "Browse"),
     ]
@@ -316,7 +302,7 @@ class PickFolderScreen(ModalScreen[Path | None]):
                 yield Button("Browse", id="browse-btn")
             with Horizontal(id="action-row"):
                 yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn")
+                yield Button("Cancel", id="cancel-btn", action="dismiss(None)")
         yield Footer()
 
     @on(Button.Pressed, "#browse-btn")
@@ -352,8 +338,3 @@ class PickFolderScreen(ModalScreen[Path | None]):
             return
 
         self.dismiss(path)
-
-    @on(Button.Pressed, "#cancel-btn")
-    def action_cancel(self) -> None:
-        """Handle cancellation (button or escape key)."""
-        self.dismiss(None)
