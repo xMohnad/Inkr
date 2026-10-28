@@ -51,7 +51,7 @@ class EditScreen(ModalScreen[str | None]):
             yield Input(value=self._value, id="edit-input", placeholder=self._placeholder)
             with Horizontal():
                 yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn", action="dismiss(None)")
+                yield Button("Cancel", id="cancel-btn", action="screen.dismiss(None)")
         yield Footer()
 
     @on(Button.Pressed, "#save-btn")
@@ -103,7 +103,7 @@ class DelayScreen(ModalScreen[int | None]):
                 yield Button("+", id="inc-btn", tooltip="Increase (+, ↑)")
             with Horizontal(id="action-row"):
                 yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn", action="dismiss(None)")
+                yield Button("Cancel", id="cancel-btn", action="screen.dismiss(None)")
         yield Footer()
 
     @staticmethod
@@ -302,7 +302,7 @@ class PickFolderScreen(ModalScreen[Path | None]):
                 yield Button("Browse", id="browse-btn")
             with Horizontal(id="action-row"):
                 yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn", action="dismiss(None)")
+                yield Button("Cancel", id="cancel-btn", action="screen.dismiss(None)")
         yield Footer()
 
     @on(Button.Pressed, "#browse-btn")
