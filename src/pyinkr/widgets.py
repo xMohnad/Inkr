@@ -7,7 +7,6 @@ import msgspec
 from rich.text import Text
 from textual import work
 from textual.binding import Binding
-from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Checkbox, ListItem, ListView, Tree
 from textual_fspicker import FileOpen
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
     from typing import ClassVar
 
     from pymkv import MKVAttachment, MKVTrack
-    from pymkv.models import MkvMergeOutput
     from rich.console import RenderableType
     from textual.app import ComposeResult
     from textual.binding import BindingType
@@ -278,14 +276,13 @@ class InfoTree(Tree[None]):
     ]
 
     app: Inkr
-    info: reactive[MkvMergeOutput | None] = reactive(None)
 
-    def watch_info(self, info: MkvMergeOutput | None) -> None:
-        """Update the tree when info changes."""
-        if info:
+    @override
+    def on_mount(self) -> None:
+        """Populate the tree when the DOM is ready."""
+        self.show_root = False
+        if info := self.app.mkv.info_json:
             self.add_json(msgspec.to_builtins(info))
-        else:
-            self.info = self.app.mkv.info_json
 
     @work(exclusive=True)
     async def action_edit_title(self) -> None:
