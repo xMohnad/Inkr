@@ -150,7 +150,7 @@ class ListTrack(ChecklistView["MKVTrack"]):
     async def action_add(self) -> None:
         """Add a new track from a file."""
         if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
-            self.app.call_from_thread(setattr, self, "loading", True)
+            self.app.call_from_thread(self.set_loading, True)
             try:
                 assert isinstance(path, Path)
                 track = self.mkv.add_track(path)
@@ -158,7 +158,7 @@ class ListTrack(ChecklistView["MKVTrack"]):
             except ValueError as e:
                 self.notify(str(e), severity="error")
             finally:
-                self.app.call_from_thread(setattr, self, "loading", False)
+                self.app.call_from_thread(self.set_loading, False)
 
     def action_toggle_default(self) -> None:
         """Toggle the default flag on the selected track."""
@@ -181,7 +181,7 @@ class ListTrack(ChecklistView["MKVTrack"]):
     async def action_check_fonts(self) -> None:
         """Show the fonts required by the selected subtitle track."""
         track = self.item
-        self.app.call_from_thread(setattr, self, "loading", True)
+        self.app.call_from_thread(self.set_loading, True)
         try:
             info = fonts.analyze_subtitle_fonts(track)
             self.app.call_from_thread(
@@ -191,7 +191,7 @@ class ListTrack(ChecklistView["MKVTrack"]):
         except ValueError as e:
             self.notify(str(e), severity="warning")
         finally:
-            self.app.call_from_thread(setattr, self, "loading", False)
+            self.app.call_from_thread(self.set_loading, False)
 
     def action_move_track(self, delta: int) -> None:
         """Move the selected track by `delta` positions."""

@@ -45,7 +45,7 @@ class OpenScreen(Screen[MkvService]):
     async def action_open(self) -> None:
         """Prompt the user to choose an MKV file to open."""
         if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
-            self.app.call_from_thread(setattr, self, "loading", True)
+            self.app.call_from_thread(self.set_loading, True)
             try:
                 assert isinstance(path, Path)
                 manager = MKVFile(path)
@@ -53,7 +53,7 @@ class OpenScreen(Screen[MkvService]):
             except ValueError as e:
                 self.notify(str(e), title="Open Failed", severity="error")
             finally:
-                self.app.call_from_thread(setattr, self, "loading", False)
+                self.app.call_from_thread(self.set_loading, False)
 
     async def action_back(self) -> None:
         """Return to the manager screen if an MKV file is already open."""
