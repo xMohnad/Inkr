@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 class EditScreen(ModalScreen[str | None]):
     """A modal screen for editing information."""
 
-    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "dismiss(None)", "Cancel")]
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "dismiss", "Cancel")]
 
     def __init__(
         self,
@@ -51,7 +51,7 @@ class EditScreen(ModalScreen[str | None]):
             yield Input(value=self._value, id="edit-input", placeholder=self._placeholder)
             with Horizontal():
                 yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn", action="screen.dismiss(None)")
+                yield Button("Cancel", id="cancel-btn", action="screen.dismiss")
         yield Footer()
 
     @on(Button.Pressed, "#save-btn")
@@ -70,7 +70,7 @@ class DelayScreen(ModalScreen[int | None]):
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("escape", "dismiss(None)", "Cancel"),
+        Binding("escape", "dismiss", "Cancel"),
         Binding("plus,equals_sign,up", "increment", "+0.1s"),
         Binding("minus,down", "decrement", "-0.1s"),
         Binding("r", "reset", "Reset"),
@@ -99,11 +99,11 @@ class DelayScreen(ModalScreen[int | None]):
             container.border_title = self._title
             with Horizontal(id="delay-row"):
                 yield Button("-", id="dec-btn", tooltip="Decrease (-, ↓)")
-                yield Input(value=self._format(self._delay_ms), id="delay-input")
+                yield Input(value=self._format(self._delay_ms), id="delay-input", restrict=r"-?\d*\.?\d*")
                 yield Button("+", id="inc-btn", tooltip="Increase (+, ↑)")
             with Horizontal(id="action-row"):
                 yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn", action="screen.dismiss(None)")
+                yield Button("Cancel", id="cancel-btn", action="screen.dismiss")
         yield Footer()
 
     @staticmethod
@@ -116,7 +116,7 @@ class DelayScreen(ModalScreen[int | None]):
         raw = self.query_one("#delay-input", Input).value.strip()
         try:
             return round(float(raw) * 1000)
-        except ValueError:
+        except (ValueError, OverflowError):
             return self._delay_ms
 
     def _set_ms(self, delay_ms: int) -> None:
@@ -166,7 +166,7 @@ class ProgressBarScreen(ModalScreen[None]):
         with Container() as container:
             container.border_title = self._title
             with Center(), Middle():
-                yield ProgressBar(total=self._total)
+                yield ProgressBar(total=self._total, show_eta=False)
         yield Footer()
 
     @property
@@ -179,7 +179,7 @@ class FontsScreen(ModalScreen[None]):
     """A modal screen listing the fonts a subtitle track needs."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("escape", "dismiss(None)", "Close"),
+        Binding("escape", "dismiss", "Close"),
         Binding("i", "import_fonts", "Import"),
     ]
 
@@ -207,6 +207,8 @@ class FontsScreen(ModalScreen[None]):
             container.border_subtitle = f"{len(self._info.usages)} variant(s)"
             if self._info.has_embedded_fonts:
                 yield Static("This subtitle already embeds its own fonts.", id="fonts-note")
+            if not self.app.font_faces:
+                yield Static("No fonts folder set. Use the command palette → Fonts Folder.", id="fonts-note")
             if self._usages:
                 yield DataTable(id="fonts-table", cursor_type="row", zebra_stripes=True)
             else:
@@ -218,7 +220,8 @@ class FontsScreen(ModalScreen[None]):
         """Populate the table once mounted."""
         if usages := self._usages:
             table = self.query_one("#fonts-table", DataTable)
-            table.add_columns("Font", "Style", ("Status", "status"))
+            table.add_columns("Font", "Style")
+            table.add_column("Status", key="status")
             for i, usage in enumerate(usages):
                 table.add_row(usage.name, self._style_label(usage), "-", key=str(i))
 
@@ -268,7 +271,7 @@ class PickFolderScreen(ModalScreen[Path | None]):
     """A modal screen for picking a folder."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("escape", "dismiss(None)", "Cancel"),
+        Binding("escape", "dismiss", "Cancel"),
         Binding("s", "save", "Save"),
         Binding("p", "browse", "Browse"),
     ]
@@ -302,7 +305,7 @@ class PickFolderScreen(ModalScreen[Path | None]):
                 yield Button("Browse", id="browse-btn")
             with Horizontal(id="action-row"):
                 yield Button("Save", variant="primary", id="save-btn")
-                yield Button("Cancel", id="cancel-btn", action="screen.dismiss(None)")
+                yield Button("Cancel", id="cancel-btn", action="screen.dismiss")
         yield Footer()
 
     @on(Button.Pressed, "#browse-btn")
@@ -311,7 +314,7 @@ class PickFolderScreen(ModalScreen[Path | None]):
         """Open folder picker."""
         folder_input = self.query_one("#folder-input", Input)
         value = folder_input.value.strip()
-        location = Path(value if value else ".")
+        location = Path(value if value else ".").expanduser()
 
         if location.is_file():
             location = location.parent
@@ -326,11 +329,12 @@ class PickFolderScreen(ModalScreen[Path | None]):
             folder_input.value = str(path)
 
     @on(Button.Pressed, "#save-btn")
+    @on(Input.Submitted, "#folder-input")
     def action_save(self) -> None:
         """Dismiss with the selected folder."""
         folder_input = self.query_one("#folder-input", Input)
         value = folder_input.value.strip()
-        path = Path(value) if value else None
+        path = Path(value).expanduser() if value else None
 
         if not path or not path.is_dir():
             folder_input.add_class("-invalid")
