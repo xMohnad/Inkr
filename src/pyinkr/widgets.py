@@ -192,21 +192,17 @@ class ListTrack(ChecklistView["MKVTrack"]):
             self.app.call_from_thread(self.set_loading, False)
 
     def action_move_track(self, delta: int) -> None:
-        """Move the selected track by `delta` positions."""
+        """Move the highlighted track by one position."""
         index = self.index
-        if index is None:
+        if index is None or not self.mkv.move_track(index, delta):
             return
 
         new_index = index + delta
-        if 0 <= new_index < len(self):
-            if delta < 0:
-                self.mkv.move_track_up(index)
-                self.move_child(index, before=new_index)
-            else:
-                self.mkv.move_track_down(index)
-                self.move_child(index, after=new_index)
-
-            self.index = new_index
+        if delta < 0:
+            self.move_child(index, before=new_index)
+        else:
+            self.move_child(index, after=new_index)
+        self.index = new_index
 
     @override
     def formatted_text(self, item: MKVTrack) -> Text:

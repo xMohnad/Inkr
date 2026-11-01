@@ -38,13 +38,21 @@ class MkvService:
         self.manager.add_track(track)
         return track
 
-    def move_track_up(self, index: int) -> None:
-        """Move the track at `index` one position earlier."""
-        self.manager.move_track_backward(index)
+    def move_track(self, index: int, delta: int) -> bool:
+        """Move the track at `index` by one position (`delta` is -1 or 1).
 
-    def move_track_down(self, index: int) -> None:
-        """Move the track at `index` one position later."""
-        self.manager.move_track_forward(index)
+        Returns:
+            Whether the track moved; `False` at the list boundaries.
+        """
+        if delta not in (-1, 1) or not 0 <= index + delta < len(self.tracks):
+            return False
+
+        if delta < 0:
+            self.manager.move_track_backward(index)
+        else:
+            self.manager.move_track_forward(index)
+
+        return True
 
     @property
     def attachments(self) -> list[MKVAttachment]:
