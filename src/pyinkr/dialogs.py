@@ -254,7 +254,7 @@ class FontsScreen(ModalScreen[None]):
 
                 a = self.app.mkv.add_attachment(match.path)
                 a.description = str(status)
-                list_view.add_item(a)
+                list_view.add_row(a)
 
             table.update_cell(str(i), "status", status, update_width=True)
 

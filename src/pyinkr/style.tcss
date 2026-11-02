@@ -12,34 +12,72 @@ TabbedContent {
 }
 
 ChecklistView {
-  & > ListItem {
+  & > ChecklistRow {
     background: $surface;
-    height: auto;
     border: round $panel-lighten-3;
-    margin: 0 1 0 1;
 
     &.-highlight {
       border: round $primary-darken-3;
     }
 
-    & > Checkbox {
+    & > Static {
       padding: 1;
-      width: 100%;
-      height: auto;
-      border: none;
-      &:focus {
-        & > .toggle--label {
-          background: transparent;
-        }
-      }
     }
   }
 
   &:focus {
-    & > ListItem.-highlight {
+    & > ChecklistRow.-highlight {
       border: round $primary;
-      color: $foreground;
     }
+  }
+
+  & > .checklist--kept,
+  & > .track--default {
+    color: $success;
+    text-style: bold;
+  }
+  & > .checklist--removed,
+  & > .track--forced {
+    color: $error;
+    text-style: bold;
+  }
+
+  & > .checklist--name {
+    text-style: bold;
+  }
+  & > .checklist--name-removed {
+    color: $text-muted;
+    text-style: strike;
+  }
+  & > .checklist--unnamed,
+  & > .attachment--description {
+    color: $text-muted;
+    text-style: italic;
+  }
+  & > .checklist--meta {
+    color: $text-muted;
+  }
+
+  & > .track--sync {
+    color: $warning;
+    text-style: italic;
+  }
+
+  & > .track--video {
+    color: $accent;
+    text-style: bold;
+  }
+  & > .track--audio {
+    color: $secondary;
+    text-style: bold;
+  }
+  & > .track--subtitles {
+    color: $warning;
+    text-style: bold;
+  }
+  & > .track--other {
+    color: $text-muted;
+    text-style: bold;
   }
 }
 
@@ -150,8 +188,11 @@ FontsScreen {
 
 ProgressBarScreen {
   Container {
-    width: 95%;
     height: 30%;
+  }
+
+  Bar {
+    width: 50;
   }
 }
 

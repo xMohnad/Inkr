@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -8,7 +7,7 @@ from pymkv import MKVFile
 from textual import work
 from textual.binding import Binding
 from textual.screen import Screen
-from textual.widgets import Checkbox, Footer, Header, TabbedContent, TabPane
+from textual.widgets import Footer, Header, TabbedContent, TabPane
 from textual_fspicker import FileOpen, FileSave
 from typing_extensions import override
 
@@ -17,8 +16,6 @@ from pyinkr.services import MkvService
 from pyinkr.widgets import InfoTree, ListAttachment, ListTrack, NoticeWidget
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
-
     from textual.app import ComposeResult
     from textual.binding import BindingType
 
@@ -100,41 +97,33 @@ class MkvManagScreen(Screen[None]):
         else:
             self.query_one(f"#{id}").focus()
 
-    @staticmethod
-    def _indices_to_remove(checkboxes: Iterable[Checkbox]) -> list[int]:
-        """Return unchecked checkbox indices in descending order."""
-        return [i for i, cb in enumerate(checkboxes) if not cb.value][::-1]
-
     @work(exclusive=True)
     async def action_save(self) -> None:
-        """Save the MKV file, applying track and attachment selections."""
-        if not (
-            save_path := await self.app.push_screen_wait(FileSave(default_file=self.app.mkv.path, can_overwrite=False))
-        ):
+        """Pick a destination and write the edited file."""
+        if not self.app.mkv.kept_tracks:
+            self.notify("Keep at least one track to save.", title="No Tracks Kept", severity="error")
             return
 
-        mkv = copy.deepcopy(self.app.mkv.manager)
-        for i in self._indices_to_remove(self.query_one(ListTrack).query(Checkbox)):
-            mkv.remove_track(i)
-
-        if not mkv.tracks:
-            self.notify("The video must contain at least one track.", title="Missing Tracks", severity="error")
+        save_path = await self.app.push_screen_wait(FileSave(default_file=self.app.mkv.path, can_overwrite=False))
+        if not save_path:
             return
 
-        for i in self._indices_to_remove(self.query_one(ListAttachment).query(Checkbox)):
-            mkv.remove_attachment(i)
+        output = self.app.mkv.build_output()
+        progress = ProgressBarScreen(f"Saving {save_path.name}...")
+        await self.app.push_screen(progress)
 
-        screen = ProgressBarScreen(f"Saving {save_path.name}...")
-        self.app.push_screen(screen)
+        def update(value: float) -> None:
+            self.app.call_from_thread(progress.progress_bar.update, progress=value)
 
         def _run_mux() -> None:
             try:
-                updater = lambda v: self.app.call_from_thread(screen.progress_bar.update, progress=v)
-                mkv.mux(save_path, progress_handler=updater)
-                self.notify(f"Saved to {save_path.name}", title="Success")
+                output.mux(save_path, progress_handler=update)
             except ValueError as e:
+                self.log.error(f"Mux failed: {e!r}")
                 self.notify(str(e), title="Save Failed", severity="error")
+            else:
+                self.notify(f"Saved to {save_path.name}", title="Success")
             finally:
-                self.app.call_from_thread(self.app.pop_screen)
+                self.app.call_from_thread(progress.dismiss)
 
         self.app.run_worker(_run_mux, thread=True)
