@@ -15,6 +15,7 @@ from typing_extensions import override
 from pyinkr import fonts
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from typing import ClassVar
 
     from textual.app import ComposeResult
@@ -180,7 +181,7 @@ class FontsScreen(ModalScreen[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "dismiss", "Close"),
-        Binding("i", "import_fonts", "Import"),
+        Binding("i", "import", "Import"),
     ]
 
     app: Inkr
@@ -188,6 +189,7 @@ class FontsScreen(ModalScreen[None]):
     def __init__(
         self,
         info: fonts.SubtitleFontInfo,
+        attach: Callable[[Path, str], object],
         title: str = "Fonts Used",
         name: str | None = None,
         id: str | None = None,
@@ -196,6 +198,7 @@ class FontsScreen(ModalScreen[None]):
         """Initialize the FontsScreen with the fonts to display."""
         super().__init__(name=name, id=id, classes=classes)
         self._info: fonts.SubtitleFontInfo = info
+        self._attach_font: Callable[[Path, str], object] = attach
         self._title: str = title
         self._usages: list[fonts.FontUsage] = sorted(info.usages, key=lambda u: (u.name.lower(), u.weight, u.italic))
 
@@ -234,36 +237,29 @@ class FontsScreen(ModalScreen[None]):
         return Text(", ".join(parts), style="bold yellow")
 
     @work(exclusive=True)
-    async def action_import_fonts(self) -> None:
-        """Import every font this subtitle needs."""
-        from pyinkr.widgets import ListAttachment
-
-        list_view = self.app.screen_stack[-2].query_one(ListAttachment)
+    async def action_import(self) -> None:
+        """Attach every font this subtitle needs."""
         table = self.query_one("#fonts-table", DataTable)
+        attached_names: set[str] = {Path(n.file_path).name for n in self.app.mkv.attachments}
 
-        seen: set[str] = {Path(n.file_path).name for n in self.app.mkv.attachments}
         for i, usage in enumerate(self._usages):
             match = fonts.find_best_match(usage, self.app.font_faces)
             if not match:
                 status = Text("Not Found", style="bold red")
-            elif match.path.name in seen:
+            elif match.path.name in attached_names:
                 status = Text("Already Attached", style="bold cyan")
             else:
-                seen.add(match.path.name)
+                attached_names.add(match.path.name)
                 status = Text("Imported", style="bold green")
-
-                a = self.app.mkv.add_attachment(match.path)
-                a.description = str(status)
-                list_view.add_row(a)
+                self._attach_font(match.path, status.plain)
 
             table.update_cell(str(i), "status", status, update_width=True)
 
     @override
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        """Check if an action may run."""
-        if action != "dismiss" and not (self.app.font_faces and self._usages):
+        """Disable importing when there is nothing to import from or to."""
+        if action == "import" and not (self.app.font_faces and self._usages):
             return None
-
         return True
 
 
