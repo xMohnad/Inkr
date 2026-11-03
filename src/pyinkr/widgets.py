@@ -88,11 +88,6 @@ class ChecklistView(ListView, Generic[ItemT]):
         """Return the row visual for `item`."""
         raise NotImplementedError
 
-    @staticmethod
-    def label(item: ItemT) -> str:
-        """Return a short human label used to identify `item` in dialog titles."""
-        raise NotImplementedError
-
     def mark_part(self, kept: bool) -> tuple[str, Style]:
         """Return the kept/removed mark with its style."""
         vs = self.get_visual_style
@@ -156,22 +151,11 @@ class ChecklistView(ListView, Generic[ItemT]):
             self.toggle_keep(event.item.target)
 
     @work(exclusive=True)
-    async def action_edit(
-        self,
-        field: str,
-        attr: str | None = None,
-        placeholder: str | None = None,
-    ) -> None:
+    async def action_edit(self, title: str, attr: str, placeholder: str = "") -> None:
         """Edit a text attribute of the highlighted item."""
         if (item := self.current) is None:
             return
 
-        if placeholder is None:
-            placeholder = f"Enter {field}..."
-        if attr is None:
-            attr = field
-
-        title = f"Edit {field.capitalize()} — {self.label(item)}"
         value = await self.app.push_screen_wait(EditScreen(getattr(item, attr), title, placeholder))
         if value is None:
             return
@@ -198,8 +182,8 @@ class ListTrack(ChecklistView["MKVTrack"]):
     }
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("n", "edit('name', 'track_name')", "Name"),
-        Binding("l", "edit('language')", "Lang"),
+        Binding("n", "edit('Track Name', 'track_name', 'Track name')", "Name"),
+        Binding("l", "edit('Language', 'language', 'e.g. eng, jpn, ara')", "Language"),
         Binding("y", "edit_delay", "Delay"),
         Binding("d", "toggle_default", "Default"),
         Binding("f", "check_fonts", "Fonts"),
@@ -214,14 +198,6 @@ class ListTrack(ChecklistView["MKVTrack"]):
     @override
     def items(self) -> list[MKVTrack]:
         return self.mkv.tracks
-
-    @staticmethod
-    @override
-    def label(item: MKVTrack) -> str:
-        """Build a short human label used to identify a track in dialog titles."""
-        kind = (item.track_type or "track").capitalize()
-        name = item.track_name or "Unnamed"
-        return f"{kind}: {name.strip()}"
 
     @work(exclusive=True, thread=True)
     async def action_add(self) -> None:
@@ -327,20 +303,14 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
     COMPONENT_CLASSES: ClassVar[set[str]] = {"attachment--description"}
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("n", "edit('name')", "Name"),
-        Binding("e", "edit('description')", "Description"),
+        Binding("n", "edit('Attachment Name', 'name', 'File name')", "Name"),
+        Binding("e", "edit('Description', 'description', 'Description')", "Description"),
     ]
 
     @property
     @override
     def items(self) -> list[MKVAttachment]:
         return self.mkv.attachments
-
-    @staticmethod
-    @override
-    def label(item: MKVAttachment) -> str:
-        """Build a short human label used to identify an attachment in dialog titles."""
-        return item.name or Path(item.file_path).name
 
     def add_path(self, path: Path, description: str | None = None) -> AwaitMount:
         """Attach the file at `path` and show it in the list."""
@@ -358,11 +328,12 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
     @override
     def format_item(self, item: MKVAttachment, kept: bool) -> VisualType:
         """Return formatted content for an attachment."""
+        name = item.name or Path(item.file_path).name
         vs = self.get_visual_style
 
         parts: list[str | tuple[str, Style]] = [
             self.mark_part(kept),
-            self.name_part(self.label(item), kept),
+            self.name_part(name, kept),
         ]
         if item.mime_type:
             parts.append((f"  ·  {item.mime_type}", vs("checklist--meta", partial=True)))
