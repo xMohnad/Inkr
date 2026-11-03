@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 import msgspec
-from rich.text import Text
-from textual import work
+from textual import on, work
 from textual.binding import Binding
+from textual.content import Content
 from textual.widget import Widget
-from textual.widgets import Checkbox, ListItem, ListView, Tree
+from textual.widgets import ListItem, ListView, Static, Tree
 from textual_fspicker import FileOpen
 from typing_extensions import override
 
@@ -16,41 +16,63 @@ from pyinkr import fonts
 from pyinkr.dialogs import DelayScreen, EditScreen, FontsScreen
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from typing import ClassVar
 
     from pymkv import MKVAttachment, MKVTrack
     from rich.console import RenderableType
     from textual.app import ComposeResult
     from textual.binding import BindingType
+    from textual.style import Style
+    from textual.visual import VisualType
     from textual.widget import AwaitMount
 
     from pyinkr.main import Inkr
     from pyinkr.services import MkvService
 
 
-ItemT = TypeVar("ItemT")
+ItemT = TypeVar("ItemT", "MKVTrack", "MKVAttachment")
+
+
+class ChecklistRow(ListItem):
+    """One row of a `ChecklistView`; remembers the item it shows."""
+
+    def __init__(self, target: Any, content: VisualType) -> None:
+        """Initialize the row for `target` with its content."""
+        super().__init__(Static(content))
+        self.target = target
+
+    def set_content(self, content: VisualType) -> None:
+        """Replace the row text."""
+        self.query_one(Static).update(content)
 
 
 class ChecklistView(ListView, Generic[ItemT]):
-    """Base for a `ListView` of checkbox items."""
+    """A list of MKV items that can each be kept or dropped from the output.
+
+    The keep/drop state lives in `MkvService`; rows only render it.
+    """
 
     app: Inkr
 
+    COMPONENT_CLASSES: ClassVar[set[str]] = {
+        "checklist--kept",
+        "checklist--removed",
+        "checklist--name",
+        "checklist--name-removed",
+        "checklist--unnamed",
+        "checklist--meta",
+    }
+
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("a", "add", "Add"),
-        Binding("enter,space", "toggle_button", "Toggle", show=False),
+        Binding("space", "toggle_keep", "Keep/Drop"),
+        Binding("j", "cursor_down", show=False),
+        Binding("k", "cursor_up", show=False),
     ]
 
-    @override
-    def compose(self) -> ComposeResult:
-        for item in self.items:
-            yield self.list_item(item)
-
-    @override
-    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        """Check if an action may run."""
-        return action == "add" or not self.is_empty
+    MARK_KEPT: ClassVar[str] = "✔"
+    MARK_REMOVED: ClassVar[str] = "✘"
+    UNNAMED_LABEL: ClassVar[str] = "Unnamed"
 
     @property
     def mkv(self) -> MkvService:
@@ -58,12 +80,12 @@ class ChecklistView(ListView, Generic[ItemT]):
         return self.app.mkv
 
     @property
-    def items(self) -> Sequence[ItemT]:
+    def items(self) -> list[ItemT]:
         """Return the domain objects backing this list, in display order."""
         raise NotImplementedError
 
-    def formatted_text(self, item: ItemT) -> Text:
-        """Return formatted text for display in a Checkbox."""
+    def format_item(self, item: ItemT, kept: bool) -> VisualType:
+        """Return the row visual for `item`."""
         raise NotImplementedError
 
     @staticmethod
@@ -71,29 +93,67 @@ class ChecklistView(ListView, Generic[ItemT]):
         """Return a short human label used to identify `item` in dialog titles."""
         raise NotImplementedError
 
-    def list_item(self, item: ItemT) -> ListItem:
-        """Return a ListItem representation of `item`."""
-        return ListItem(Checkbox(self.formatted_text(item), True))
+    def mark_part(self, kept: bool) -> tuple[str, Style]:
+        """Return the kept/removed mark with its style."""
+        vs = self.get_visual_style
+        if kept:
+            return f"{self.MARK_KEPT} ", vs("checklist--kept", partial=True)
+        return f"{self.MARK_REMOVED} ", vs("checklist--removed", partial=True)
 
-    def add_item(self, item: ItemT) -> AwaitMount:
-        """Append `item` to the list and select it."""
-        return self.append(self.list_item(item))
+    def name_part(self, name: str | None, kept: bool) -> tuple[str, Style]:
+        """Return the item name with its style, or a placeholder if missing."""
+        vs = self.get_visual_style
+        if not name:
+            return self.UNNAMED_LABEL, vs("checklist--unnamed", partial=True)
+        return name, vs("checklist--name" if kept else "checklist--name-removed", partial=True)
+
+    @override
+    def compose(self) -> ComposeResult:
+        for item in self.items:
+            yield self.make_row(item)
+
+    def make_row(self, item: ItemT) -> ChecklistRow:
+        """Build the row for `item`."""
+        return ChecklistRow(item, self.format_item(item, self.mkv.is_kept(item)))
+
+    def add_row(self, item: ItemT) -> AwaitMount:
+        """Append a row for `item` to the end of the list."""
+        return self.append(self.make_row(item))
+
+    def refresh_row(self, item: ItemT) -> None:
+        """Re-render the row showing `item`."""
+        for row in self.query(ChecklistRow):
+            if row.target is item:
+                row.set_content(self.format_item(item, self.mkv.is_kept(item)))
+                return
 
     @property
-    def checkbox(self) -> Checkbox:
-        """Return the Checkbox widget for the currently selected item."""
-        assert self.index is not None
-        return self.children[self.index].query_one(Checkbox)
+    def current(self) -> ItemT | None:
+        """Return the highlighted item, if any."""
+        row = self.highlighted_child
+        return row.target if isinstance(row, ChecklistRow) else None
 
-    @property
-    def item(self) -> ItemT:
-        """Return the currently selected domain object."""
-        assert self.index is not None
-        return self.items[self.index]
+    @override
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Hide item actions while the list is empty."""
+        return action == "add" or len(self) > 0
 
-    def action_toggle_button(self) -> None:
-        """Toggle selection state of the current item."""
-        self.checkbox.toggle()
+    def toggle_keep(self, item: ItemT) -> None:
+        """Flip whether `item` stays in the output."""
+        self.mkv.toggle_kept(item)
+        self.refresh_row(item)
+
+    def action_toggle_keep(self) -> None:
+        """Toggle the highlighted item."""
+        if (item := self.current) is not None:
+            self.toggle_keep(item)
+
+    @on(ListView.Selected)
+    def _on_selected(self, event: ListView.Selected) -> None:
+        """Toggle on Enter or click."""
+        event.stop()
+        if isinstance(event.item, ChecklistRow):
+            self.toggle_keep(event.item.target)
 
     @work(exclusive=True)
     async def action_edit(
@@ -102,38 +162,57 @@ class ChecklistView(ListView, Generic[ItemT]):
         attr: str | None = None,
         placeholder: str | None = None,
     ) -> None:
-        """Shared flow for editing a single string field on the selected item."""
+        """Edit a text attribute of the highlighted item."""
+        if (item := self.current) is None:
+            return
+
         if placeholder is None:
             placeholder = f"Enter {field}..."
         if attr is None:
             attr = field
-        item = self.item
+
         title = f"Edit {field.capitalize()} — {self.label(item)}"
         value = await self.app.push_screen_wait(EditScreen(getattr(item, attr), title, placeholder))
-        if value is not None:
-            try:
-                setattr(item, attr, value)
-                self.checkbox.label = self.formatted_text(item)
-            except ValueError as e:
-                self.notify(str(e), severity="error")
+        if value is None:
+            return
+
+        try:
+            setattr(item, attr, value)
+        except ValueError as e:
+            self.notify(str(e), title="Invalid Value", severity="error")
+        else:
+            self.refresh_row(item)
 
 
 class ListTrack(ChecklistView["MKVTrack"]):
     """List of MKV tracks."""
 
+    COMPONENT_CLASSES: ClassVar[set[str]] = {
+        "track--default",
+        "track--forced",
+        "track--sync",
+        "track--video",
+        "track--audio",
+        "track--subtitles",
+        "track--other",
+    }
+
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("n", "edit('name', 'track_name')", "Name"),
         Binding("l", "edit('language')", "Lang"),
         Binding("y", "edit_delay", "Delay"),
-        Binding("d", "toggle_default", "Toggle Default"),
+        Binding("d", "toggle_default", "Default"),
         Binding("f", "check_fonts", "Fonts"),
         Binding("alt+up", "move_track(-1)", "Move Up", show=False),
         Binding("alt+down", "move_track(1)", "Move Down", show=False),
     ]
 
+    KNOWN_KINDS: ClassVar[frozenset[str]] = frozenset({"video", "audio", "subtitles"})
+    DEFAULT_LANGUAGE: ClassVar[str] = "und"
+
     @property
     @override
-    def items(self) -> Sequence[MKVTrack]:
+    def items(self) -> list[MKVTrack]:
         return self.mkv.tracks
 
     @staticmethod
@@ -152,33 +231,37 @@ class ListTrack(ChecklistView["MKVTrack"]):
             try:
                 assert isinstance(path, Path)
                 track = self.mkv.add_track(path)
-                self.app.call_from_thread(self.add_item, track)
+                self.app.call_from_thread(self.add_row, track)
             except ValueError as e:
-                self.notify(str(e), severity="error")
+                self.notify(str(e), title="Add Failed", severity="error")
             finally:
                 self.app.call_from_thread(self.set_loading, False)
 
     def action_toggle_default(self) -> None:
-        """Toggle the default flag on the selected track."""
-        track = self.item
-        track.default_track = not track.default_track
-        self.checkbox.label = self.formatted_text(track)
+        """Toggle the default flag of the highlighted track."""
+        if (track := self.current) is not None:
+            track.default_track = not track.default_track
+            self.refresh_row(track)
 
     @work(exclusive=True)
     async def action_edit_delay(self) -> None:
         """Edit the track sync delay."""
-        track = self.item
-        result = await self.app.push_screen_wait(
-            DelayScreen(track.sync or 0, title=f"Delay — {self.label(track)}"),
-        )
-        if result is not None:
-            track.sync = result or None
-            self.checkbox.label = self.formatted_text(track)
+        if (track := self.current) is None:
+            return
+
+        delay = await self.app.push_screen_wait(DelayScreen(track.sync or 0, "Track Delay"))
+        if delay is None:
+            return
+
+        track.sync = delay or None
+        self.refresh_row(track)
 
     @work(exclusive=True, thread=True)
     async def action_check_fonts(self) -> None:
         """Show the fonts required by the selected subtitle track."""
-        track = self.item
+        if (track := self.current) is None:
+            return
+
         self.app.call_from_thread(self.set_loading, True)
         try:
             info = fonts.analyze_subtitle_fonts(track)
@@ -187,7 +270,7 @@ class ListTrack(ChecklistView["MKVTrack"]):
                 FontsScreen(info, title=f"Fonts — {self.label(track)}"),
             )
         except ValueError as e:
-            self.notify(str(e), severity="warning")
+            self.notify(str(e), title="Fonts", severity="warning")
         finally:
             self.app.call_from_thread(self.set_loading, False)
 
@@ -205,24 +288,36 @@ class ListTrack(ChecklistView["MKVTrack"]):
         self.index = new_index
 
     @override
-    def formatted_text(self, item: MKVTrack) -> Text:
-        """Return formatted text for display in a Checkbox."""
-        name = item.track_name or "Unnamed"
-        lang = item.language or "und"
-        codec = item.track_codec or "?"
+    def format_item(self, item: MKVTrack, kept: bool) -> VisualType:
+        """Return formatted content for a track."""
+        vs = self.get_visual_style
 
-        text = Text(name, style="bold")
-        text += Text(f"  [{lang} · {codec}]", style="dim")
+        kind = (item.track_type or "").lower()
+        kind_cls = f"track--{kind}" if kind in self.KNOWN_KINDS else "track--other"
+        lang = item.language or self.DEFAULT_LANGUAGE
+
+        parts: list[str | tuple[str, Style]] = [
+            self.mark_part(kept),
+            (kind[:1].upper() or "O", vs(kind_cls, partial=True)),
+            "  ",
+            self.name_part(item.track_name, kept),
+            ("  ·  " + " · ".join(filter(None, (lang, item.track_codec))), vs("checklist--meta", partial=True)),
+        ]
+
         if item.default_track:
-            text += Text("  DEFAULT", style="bold green")
+            parts.append(("  DEFAULT", vs("track--default", partial=True)))
+        if item.forced_track:
+            parts.append(("  FORCED", vs("track--forced", partial=True)))
         if item.sync:
-            sign = "+" if item.sync > 0 else ""
-            text += Text(f"  ⏱ {sign}{item.sync / 1000:.2f}s", style="italic yellow")
-        return text
+            parts.append((f"  ⏱ {item.sync / 1000:+.2f}s", vs("track--sync", partial=True)))
+
+        return Content.assemble(*parts)
 
 
 class ListAttachment(ChecklistView["MKVAttachment"]):
     """List of MKV attachments."""
+
+    COMPONENT_CLASSES: ClassVar[set[str]] = {"attachment--description"}
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("n", "edit('name')", "Name"),
@@ -231,7 +326,7 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
 
     @property
     @override
-    def items(self) -> Sequence[MKVAttachment]:
+    def items(self) -> list[MKVAttachment]:
         return self.mkv.attachments
 
     @staticmethod
@@ -245,26 +340,30 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
         """Add a new attachment from a file."""
         if path := await self.app.push_screen_wait(FileOpen()):
             attachment = self.mkv.add_attachment(path)
-            self.add_item(attachment)
+            self.add_row(attachment)
 
     @override
-    def formatted_text(self, item: MKVAttachment) -> Text:
-        """Return formatted text for display in the list."""
-        name = self.label(item)
-        mime = item.mime_type or "?"
+    def format_item(self, item: MKVAttachment, kept: bool) -> VisualType:
+        """Return formatted content for an attachment."""
+        vs = self.get_visual_style
 
-        text = Text(name, style="bold")
-        text += Text(f"  [{mime}]", style="dim")
+        parts: list[str | tuple[str, Style]] = [
+            self.mark_part(kept),
+            self.name_part(self.label(item), kept),
+        ]
+        if item.mime_type:
+            parts.append((f"  ·  {item.mime_type}", vs("checklist--meta", partial=True)))
         if item.description:
-            text += Text(f"  — {item.description}", style="italic")
-        return text
+            parts.append((f"  — {item.description}", vs("attachment--description", partial=True)))
+
+        return Content.assemble(*parts)
 
 
 class InfoTree(Tree[None]):
     """A widget that displays MKV Info."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("t", "edit_title", "Edit Title"),
+        Binding("t", "edit_title", "Title"),
         Binding("j", "cursor_down", show=False),
         Binding("k", "cursor_up", show=False),
         Binding("h", "scroll_left", show=False),
