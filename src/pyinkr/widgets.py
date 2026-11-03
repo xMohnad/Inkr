@@ -265,14 +265,21 @@ class ListTrack(ChecklistView["MKVTrack"]):
         self.app.call_from_thread(self.set_loading, True)
         try:
             info = fonts.analyze_subtitle_fonts(track)
-            self.app.call_from_thread(
-                self.app.push_screen,
-                FontsScreen(info, title=f"Fonts — {self.label(track)}"),
-            )
         except ValueError as e:
             self.notify(str(e), title="Fonts", severity="warning")
+            return
         finally:
             self.app.call_from_thread(self.set_loading, False)
+
+        attachments = self.screen.query_one(ListAttachment)
+        self.app.call_from_thread(
+            self.app.push_screen,
+            FontsScreen(
+                info=info,
+                attach=attachments.add_path,
+                title=f"Fonts — {track.track_name or self.UNNAMED_LABEL}",
+            ),
+        )
 
     def action_move_track(self, delta: int) -> None:
         """Move the highlighted track by one position."""
@@ -335,12 +342,18 @@ class ListAttachment(ChecklistView["MKVAttachment"]):
         """Build a short human label used to identify an attachment in dialog titles."""
         return item.name or Path(item.file_path).name
 
+    def add_path(self, path: Path, description: str | None = None) -> AwaitMount:
+        """Attach the file at `path` and show it in the list."""
+        attachment = self.mkv.add_attachment(path)
+        if description:
+            attachment.description = description
+        return self.add_row(attachment)
+
     @work(exclusive=True)
     async def action_add(self) -> None:
         """Add a new attachment from a file."""
         if path := await self.app.push_screen_wait(FileOpen()):
-            attachment = self.mkv.add_attachment(path)
-            self.add_row(attachment)
+            self.add_path(path)
 
     @override
     def format_item(self, item: MKVAttachment, kept: bool) -> VisualType:
