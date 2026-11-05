@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from pymkv import MKVFile
 from textual import work
 from textual.binding import Binding
 from textual.screen import Screen
@@ -38,19 +36,20 @@ class OpenScreen(Screen[MkvService]):
         yield NoticeWidget()
         yield Footer()
 
-    @work(exclusive=True, thread=True)
+    @work(exclusive=True)
     async def action_open(self) -> None:
         """Prompt the user to choose an MKV file to open."""
-        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
-            self.app.call_from_thread(self.set_loading, True)
+        if path := await self.app.push_screen_wait(FileOpen()):
+            self.loading = True
             try:
-                assert isinstance(path, Path)
-                manager = MKVFile(path)
-                self.app.call_from_thread(self.dismiss, MkvService(manager, path))
-            except ValueError as e:
+                mkv = await MkvService.open(path)
+            except (ValueError, OSError) as e:
                 self.notify(str(e), title="Open Failed", severity="error")
+                return
             finally:
-                self.app.call_from_thread(self.set_loading, False)
+                self.loading = False
+
+            self.dismiss(mkv)
 
     async def action_back(self) -> None:
         """Return to the manager screen if an MKV file is already open."""
@@ -108,22 +107,19 @@ class MkvManagScreen(Screen[None]):
         if not save_path:
             return
 
-        output = self.app.mkv.build_output()
         progress = ProgressBarScreen(f"Saving {save_path.name}...")
         await self.app.push_screen(progress)
 
         def update(value: float) -> None:
+            # Called from the mux thread.
             self.app.call_from_thread(progress.progress_bar.update, progress=value)
 
-        def _run_mux() -> None:
-            try:
-                output.mux(save_path, progress_handler=update)
-            except ValueError as e:
-                self.log.error(f"Mux failed: {e!r}")
-                self.notify(str(e), title="Save Failed", severity="error")
-            else:
-                self.notify(f"Saved to {save_path.name}", title="Success")
-            finally:
-                self.app.call_from_thread(progress.dismiss)
-
-        self.app.run_worker(_run_mux, thread=True)
+        try:
+            await self.app.mkv.save(save_path, on_progress=update)
+        except ValueError as e:
+            self.log.error(f"Mux failed: {e!r}")
+            self.notify(str(e), title="Save Failed", severity="error")
+        else:
+            self.notify(f"Saved to {save_path.name}", title="Success")
+        finally:
+            progress.dismiss()

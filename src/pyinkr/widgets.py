@@ -12,7 +12,6 @@ from textual.widgets import ListItem, ListView, Static, Tree
 from textual_fspicker import FileOpen
 from typing_extensions import override
 
-from pyinkr import fonts
 from pyinkr.dialogs import DelayScreen, EditScreen, FontsScreen
 
 if TYPE_CHECKING:
@@ -199,19 +198,20 @@ class ListTrack(ChecklistView["MKVTrack"]):
     def items(self) -> list[MKVTrack]:
         return self.mkv.tracks
 
-    @work(exclusive=True, thread=True)
+    @work(exclusive=True)
     async def action_add(self) -> None:
         """Add a new track from a file."""
-        if path := self.app.call_from_thread(self.app.push_screen_wait, FileOpen()):
-            self.app.call_from_thread(self.set_loading, True)
+        if path := await self.app.push_screen_wait(FileOpen()):
+            self.loading = True
             try:
-                assert isinstance(path, Path)
-                track = self.mkv.add_track(path)
-                self.app.call_from_thread(self.add_row, track)
-            except ValueError as e:
+                track = await self.mkv.add_track(path)
+            except (ValueError, OSError) as e:
                 self.notify(str(e), title="Add Failed", severity="error")
+                return
             finally:
-                self.app.call_from_thread(self.set_loading, False)
+                self.loading = False
+
+            self.add_row(track)
 
     def action_toggle_default(self) -> None:
         """Toggle the default flag of the highlighted track."""
@@ -232,29 +232,28 @@ class ListTrack(ChecklistView["MKVTrack"]):
         track.sync = delay or None
         self.refresh_row(track)
 
-    @work(exclusive=True, thread=True)
+    @work(exclusive=True)
     async def action_check_fonts(self) -> None:
         """Show the fonts required by the selected subtitle track."""
         if (track := self.current) is None:
             return
 
-        self.app.call_from_thread(self.set_loading, True)
+        self.loading = True
         try:
-            info = fonts.analyze_subtitle_fonts(track)
+            info = await self.mkv.analyze_fonts(track)
         except ValueError as e:
             self.notify(str(e), title="Fonts", severity="warning")
             return
         finally:
-            self.app.call_from_thread(self.set_loading, False)
+            self.loading = False
 
         attachments = self.screen.query_one(ListAttachment)
-        self.app.call_from_thread(
-            self.app.push_screen,
+        self.app.push_screen(
             FontsScreen(
                 info=info,
                 attach=attachments.add_path,
                 title=f"Fonts — {track.track_name or self.UNNAMED_LABEL}",
-            ),
+            )
         )
 
     def action_move_track(self, delta: int) -> None:
