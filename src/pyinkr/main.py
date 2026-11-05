@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, override
 
 from textual import work
 from textual.app import App, SystemCommand
+from textual.worker import get_current_worker
 
 from pyinkr import fonts
 from pyinkr.dialogs import PickFolderScreen
@@ -49,29 +50,36 @@ class Inkr(App[None]):
 
     @override
     def get_system_commands(self, screen: Screen[object]) -> Iterable[SystemCommand]:
-        yield SystemCommand(
-            "Fonts Folder",
-            "Pick fonts folder",
-            self.action_fonts_folder,
-        )
+        yield SystemCommand("Fonts Folder", "Pick fonts folder", self.action_fonts_folder)
         yield from super().get_system_commands(screen)
 
-    @work(exclusive=True, thread=True)
-    def scan_font_faces(self, directory: Path) -> None:
-        """Scan `directory` for font faces."""
-        self.font_faces = fonts.scan_font_faces(directory)
-        self.log.debug(f"Found {len(self.font_faces)} font faces")
+    @work(exclusive=True, thread=True, group="faces")
+    def scan_font_faces(self, directory: Path | None = None) -> None:
+        """Scan a folder for font faces and store them in `font_faces`.
+
+        Args:
+            directory: Folder to scan. Defaults to the saved fonts folder.
+        """
+        directory = directory or self.settings.fonts_folder_path
+        if directory and directory.is_dir():
+            faces = fonts.scan_font_faces(directory)
+            if get_current_worker().is_cancelled:
+                return
+            self.font_faces = faces
+            self.log.debug(f"Found {len(self.font_faces)} font faces")
 
     def on_load(self) -> None:
-        """Load the app."""
+        """Initialize app state before it starts."""
         self.settings = Settings.load()
         self.theme = self.settings.theme
         self.font_faces = []
-        if (path := self.settings.fonts_folder_path) and path.is_dir():
-            self.scan_font_faces(path)
+
+    def on_ready(self) -> None:
+        """Run startup tasks once the app is ready."""
+        self.scan_font_faces()
 
     def on_exit_app(self) -> None:
-        """Exit the app."""
+        """Persist app state before exiting."""
         if hasattr(self, "settings"):
             self.settings.theme = self.theme
             self.settings.save()
