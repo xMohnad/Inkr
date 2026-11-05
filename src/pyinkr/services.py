@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 from typing import TYPE_CHECKING
 
 from pymkv import MKVAttachment, MKVFile, MKVTrack
 
+from pyinkr import fonts
+
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from pymkv.models import MkvMergeOutput
@@ -15,6 +19,12 @@ class MkvService:
     """Domain layer over `pymkv.MKVFile`: owns the edit state of one opened file.
 
     Widgets only display this state; they never keep it themselves.
+
+    Threading: every blocking operation (`open`, `add_track`, `analyze_fonts`,
+    `save`) is a coroutine that runs the blocking part in a worker thread
+    with `asyncio.to_thread`. Callers just `await` them from the event loop.
+    The container's lists are only mutated on the event loop, never in a
+    thread, because the UI reads them.
     """
 
     def __init__(self, manager: MKVFile, path: Path) -> None:
@@ -22,6 +32,17 @@ class MkvService:
         self.manager: MKVFile = manager
         self.path: Path = path
         self._dropped: set[int] = set()
+
+    @classmethod
+    async def open(cls, path: Path) -> MkvService:
+        """Load the MKV file at `path` (probes it in a worker thread).
+
+        Raises:
+            ValueError: If the file is not a valid MKV.
+            FileNotFoundError: If mkvmerge or the file does not exist.
+        """
+        manager = await asyncio.to_thread(MKVFile, path)
+        return cls(manager, path)
 
     @property
     def tracks(self) -> list[MKVTrack]:
@@ -59,9 +80,18 @@ class MkvService:
         """Tracks that will be in the output."""
         return [t for t in self.tracks if self.is_kept(t)]
 
-    def add_track(self, path: Path) -> MKVTrack:
-        """Add a track from `path` and return it."""
-        track = MKVTrack(
+    async def add_track(self, path: Path) -> MKVTrack:
+        """Add a track from `path` and return it.
+
+        The file is probed in a worker thread; the track is added to the
+        container afterwards, on the event loop. Nothing changes on failure.
+
+        Raises:
+            ValueError: If the file is not a valid track source.
+            FileNotFoundError: If mkvmerge or the file does not exist.
+        """
+        track = await asyncio.to_thread(
+            MKVTrack,
             str(path),
             track_name=path.stem,
             mkvmerge_path=self.manager.mkvmerge_path,
@@ -70,10 +100,22 @@ class MkvService:
         return track
 
     def add_attachment(self, path: Path) -> MKVAttachment:
-        """Add an attachment from `path` and return it."""
+        """Add an attachment from `path` and return it.
+
+        Raises:
+            FileNotFoundError: If the file does not exist.
+        """
         attachment = MKVAttachment(str(path), name=path.name)
         self.manager.add_attachment(attachment)
         return attachment
+
+    async def analyze_fonts(self, track: MKVTrack) -> fonts.SubtitleFontInfo:
+        """Return the fonts `track` needs (extracts the subtitle in a worker thread).
+
+        Raises:
+            ValueError: If `track` is not a supported subtitle track.
+        """
+        return await asyncio.to_thread(fonts.analyze_subtitle_fonts, track)
 
     def move_track(self, index: int, delta: int) -> bool:
         """Move the track at `index` by one position (`delta` is -1 or 1).
@@ -101,3 +143,18 @@ class MkvService:
             if not self.is_kept(self.attachments[i]):
                 output.remove_attachment(i)
         return output
+
+    async def save(self, path: Path, on_progress: Callable[[int], None] | None = None) -> None:
+        """Write the edited file to `path` (muxes in a worker thread).
+
+        Args:
+            path: Destination file.
+            on_progress: Called with the progress percentage (0-100) **from the
+                worker thread**, so it must not touch the UI directly; use
+                `App.call_from_thread`.
+
+        Raises:
+            ValueError: If mkvmerge exits with a non-zero status.
+        """
+        output = self.build_output()
+        await asyncio.to_thread(output.mux, path, progress_handler=on_progress)
