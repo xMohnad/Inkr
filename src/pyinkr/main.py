@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, override
+from typing import TYPE_CHECKING, ClassVar
 
 from textual import work
 from textual.app import App, SystemCommand
 from textual.worker import get_current_worker
+from textual_fspicker import FileOpen
+from typing_extensions import override
 
 from pyinkr import fonts
 from pyinkr.dialogs import PickFolderScreen
-from pyinkr.screen import MkvManagScreen, OpenScreen
+from pyinkr.screen import HomeScreen, MkvManagScreen
+from pyinkr.services import MkvService
 from pyinkr.settings import Settings
+from pyinkr.widgets import ReloadRequested
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -18,11 +22,9 @@ if TYPE_CHECKING:
     from textual.screen import Screen
     from textual.types import CSSPathType
 
-    from pyinkr.services import MkvService
-
 
 class Inkr(App[None]):
-    """The application entry point: opens an MKV file, then manages it."""
+    """Terminal app for editing MKV files."""
 
     CSS_PATH: ClassVar[CSSPathType | None] = "style.tcss"
 
@@ -30,11 +32,58 @@ class Inkr(App[None]):
     settings: Settings  # pyright: ignore[reportUninitializedInstanceVariable]
     font_faces: list[fonts.FontFile]  # pyright: ignore[reportUninitializedInstanceVariable]
 
-    @work(exclusive=True)
-    async def on_mount(self) -> None:
-        """Prompt for an MKV file to open, then show the manager screen."""
-        self.mkv = await self.push_screen_wait(OpenScreen())
-        self.push_screen(MkvManagScreen())
+    def on_mount(self) -> None:
+        """Install the manager screen."""
+        self.install_screen(MkvManagScreen(), "manager")
+
+    @override
+    def get_default_screen(self) -> Screen[None]:
+        return HomeScreen(id="_default")
+
+    @work(exclusive=True, group="open")
+    async def open_mkv(self, path: Path | None = None) -> None:
+        """Open an MKV file and show it in the manager screen.
+
+        Args:
+            path: File to open. Prompts for one when omitted.
+        """
+        path = path or await self.push_screen_wait(FileOpen())
+        if not path:
+            return
+
+        # Loading hides all widgets on the active screen, so Textual moves focus away
+        # from the focused widget and doesn't restore it. To avoid that, pop the manager
+        # first and show loading on the screen below; the manager is pushed again
+        # after the file opens and starts with fresh focus.
+        if isinstance(self.screen, MkvManagScreen):
+            self.pop_screen()
+
+        has_mkv = self.has_mkv
+        screen = self.screen
+        screen.loading = True
+        try:
+            self.mkv = await MkvService.open(path)
+        except (ValueError, OSError) as e:
+            self.notify(str(e), title="Open Failed", severity="error")
+            if has_mkv:
+                self.push_screen("manager")
+            return
+        finally:
+            screen.loading = False
+
+        self.settings.add_recent(path)
+        self.push_screen("manager")
+        if has_mkv:
+            self.screen.post_message(ReloadRequested())
+
+    def action_open(self) -> None:
+        """Open a file."""
+        self.open_mkv()
+
+    @property
+    def has_mkv(self) -> bool:
+        """Whether an MKV file is currently open."""
+        return hasattr(self, "mkv")
 
     @work(exclusive=True)
     async def action_fonts_folder(self) -> None:
@@ -50,6 +99,7 @@ class Inkr(App[None]):
 
     @override
     def get_system_commands(self, screen: Screen[object]) -> Iterable[SystemCommand]:
+        yield SystemCommand("Open File", "Open an MKV file", self.action_open)
         yield SystemCommand("Fonts Folder", "Pick fonts folder", self.action_fonts_folder)
         yield from super().get_system_commands(screen)
 

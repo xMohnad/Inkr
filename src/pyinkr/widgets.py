@@ -7,7 +7,7 @@ import msgspec
 from textual import on, work
 from textual.binding import Binding
 from textual.content import Content
-from textual.widget import Widget
+from textual.message import Message
 from textual.widgets import ListItem, ListView, Static, Tree
 from textual_fspicker import FileOpen
 from typing_extensions import override
@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from typing import ClassVar
 
     from pymkv import MKVAttachment, MKVTrack
-    from rich.console import RenderableType
     from textual.app import ComposeResult
     from textual.binding import BindingType
     from textual.style import Style
@@ -30,6 +29,10 @@ if TYPE_CHECKING:
 
 
 ItemT = TypeVar("ItemT", "MKVTrack", "MKVAttachment")
+
+
+class ReloadRequested(Message, bubble=False):
+    """Posted to reload a widget on opening a file."""
 
 
 class ChecklistRow(ListItem):
@@ -103,12 +106,15 @@ class ChecklistView(ListView, Generic[ItemT]):
 
     @override
     def compose(self) -> ComposeResult:
-        for item in self.items:
-            yield self.make_row(item)
+        yield from self.make_rows()
 
     def make_row(self, item: ItemT) -> ChecklistRow:
         """Build the row for `item`."""
         return ChecklistRow(item, self.format_item(item, self.mkv.is_kept(item)))
+
+    def make_rows(self) -> list[ChecklistRow]:
+        """Build a row for each item."""
+        return [self.make_row(item) for item in self.items]
 
     def add_row(self, item: ItemT) -> AwaitMount:
         """Append a row for `item` to the end of the list."""
@@ -148,6 +154,15 @@ class ChecklistView(ListView, Generic[ItemT]):
         event.stop()
         if isinstance(event.item, ChecklistRow):
             self.toggle_keep(event.item.target)
+
+    @on(ReloadRequested)
+    async def _reload(self) -> None:
+        """Reload the rows."""
+        index = self.index
+        async with self.batch():
+            await self.clear()
+            await self.extend(self.make_rows())
+        self.index = index
 
     @work(exclusive=True)
     async def action_edit(self, title: str, attr: str, placeholder: str = "") -> None:
@@ -359,8 +374,13 @@ class InfoTree(Tree[None]):
     def on_mount(self) -> None:
         """Populate the tree when the DOM is ready."""
         self.show_root = False
-        if info := self.app.mkv.info_json:
-            self.add_json(msgspec.to_builtins(info))
+        self._reload()
+
+    @on(ReloadRequested)
+    def _reload(self) -> None:
+        """Reload the tree."""
+        info = self.app.mkv.info_json or {}
+        self.clear().add_json(msgspec.to_builtins(info))
 
     @work(exclusive=True)
     async def action_edit_title(self) -> None:
@@ -371,16 +391,3 @@ class InfoTree(Tree[None]):
         )
         if title is not None:
             mkv.title = title
-
-
-class NoticeWidget(Widget):
-    """A widget that displays notices."""
-
-    can_focus: bool = True
-    """Widget may receive focus."""
-    can_focus_children: bool = False
-    """Widget's children may receive focus."""
-
-    @override
-    def render(self) -> RenderableType:
-        return "Press [bold green]o[/] to open a file"

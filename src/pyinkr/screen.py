@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from textual import work
+from textual import on, work
 from textual.binding import Binding
+from textual.content import Content
 from textual.screen import Screen
-from textual.widgets import Footer, Header, TabbedContent, TabPane
-from textual_fspicker import FileOpen, FileSave
+from textual.widgets import Footer, Header, OptionList, TabbedContent, TabPane
+from textual.widgets.option_list import Option, OptionDoesNotExist
+from textual_fspicker import FileSave
 from typing_extensions import override
 
 from pyinkr.dialogs import ProgressBarScreen
-from pyinkr.services import MkvService
-from pyinkr.widgets import InfoTree, ListAttachment, ListTrack, NoticeWidget
+from pyinkr.widgets import InfoTree, ListAttachment, ListTrack, ReloadRequested
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -20,12 +22,20 @@ if TYPE_CHECKING:
     from pyinkr.main import Inkr
 
 
-class OpenScreen(Screen[MkvService]):
-    """Screen for selecting and opening an MKV file."""
+class HomeScreen(Screen[None]):
+    """The app's home screen."""
+
+    COMPONENT_CLASSES: ClassVar[set[str]] = {
+        "resume--label",
+        "resume--name",
+        "open--label",
+        "recent--name",
+        "recent--path",
+    }
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("o", "open", "Open"),
-        Binding("escape", "back", "Back", tooltip="Back To Opened MKV"),
+        Binding("o", "app.open", "Open"),
+        Binding("r", "resume", "Resume"),
     ]
 
     app: Inkr
@@ -33,30 +43,90 @@ class OpenScreen(Screen[MkvService]):
     @override
     def compose(self) -> ComposeResult:
         yield Header()
-        yield NoticeWidget()
+        yield OptionList()
         yield Footer()
 
-    @work(exclusive=True)
-    async def action_open(self) -> None:
-        """Prompt the user to choose an MKV file to open."""
-        if path := await self.app.push_screen_wait(FileOpen()):
-            self.loading = True
-            try:
-                mkv = await MkvService.open(path)
-            except (ValueError, OSError) as e:
-                self.notify(str(e), title="Open Failed", severity="error")
+    def on_screen_resume(self) -> None:
+        """Rebuild the list every time the screen is shown."""
+        self.populate()
+
+    @staticmethod
+    def short_dir(path: Path) -> str:
+        """Return `path` with the home folder abbreviated to `~`."""
+        try:
+            relative = path.relative_to(Path.home())
+        except (ValueError, RuntimeError):
+            return str(path)
+        return f"~/{relative}" if relative.parts else "~"
+
+    def populate(self) -> None:
+        """Fill the list with the options."""
+        options: list[Option | None] = []
+
+        if self.app.has_mkv:
+            options.append(self._resume_option())
+
+        options.append(self._open_option())
+
+        if recent := self.app.settings.recent_paths:
+            options.append(None)
+            options.extend(map(self._recent_option, recent))
+
+        option_list = self.query_one(OptionList)
+        selected = option_list.highlighted_option
+        selected = selected and selected.id or ""
+        option_list.set_options(options)
+        try:
+            option_list.highlighted = option_list.get_option_index(selected)
+        except OptionDoesNotExist:
+            option_list.highlighted = 0
+
+    def _resume_option(self) -> Option:
+        """Build the option that returns to the open file."""
+        return Option(
+            Content.assemble(
+                ("▶ Resume  ", self.get_visual_style("resume--label", partial=True)),
+                (self.app.mkv.path.name, self.get_visual_style("resume--name", partial=True)),
+            ),
+            id="resume",
+        )
+
+    def _open_option(self) -> Option:
+        """Build the option that opens a file."""
+        label = self.get_visual_style("open--label", partial=True)
+        return Option(Content.assemble(("Open file…", label)), id="open")
+
+    def _recent_option(self, path: Path) -> Option:
+        """Build the option for a recent file."""
+        return Option(
+            Content.assemble(
+                (path.name, self.get_visual_style("recent--name", partial=True)),
+                "\n",
+                (self.short_dir(path.parent), self.get_visual_style("recent--path", partial=True)),
+            ),
+            id=str(path),
+        )
+
+    @on(OptionList.OptionSelected)
+    def _selected(self, event: OptionList.OptionSelected) -> None:
+        """Run the action of the selected home list option."""
+        event.stop()
+        match event.option_id:
+            case None:
                 return
-            finally:
-                self.loading = False
+            case "resume":
+                self.action_resume()
+            case "open":
+                self.app.open_mkv()
+            case path:
+                self.app.open_mkv(Path(path))
 
-            self.dismiss(mkv)
-
-    async def action_back(self) -> None:
-        """Return to the manager screen if an MKV file is already open."""
-        if hasattr(self.app, "mkv"):
-            await self.run_action("app.back")
+    def action_resume(self) -> None:
+        """Return to the open file."""
+        if self.app.has_mkv:
+            self.app.push_screen("manager")
         else:
-            self.notify("Open MKV First", title="No File Open", severity="warning")
+            self.notify("Open File First", title="No File Open", severity="warning")
 
 
 class MkvManagScreen(Screen[None]):
@@ -64,13 +134,13 @@ class MkvManagScreen(Screen[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("s", "save", "Save"),
-        Binding("escape", "back_to_open", "Back To Open Screen", False),
+        Binding("escape", "app.pop_screen", "Home", False),
     ]
     app: Inkr
 
     @override
     def compose(self) -> ComposeResult:
-        self.sub_title = self.app.mkv.path.name
+        self._update_title()
         yield Header()
         # TODO: Add a tab for chapters
         with TabbedContent(initial="info-tab", id="tabs"):
@@ -82,19 +152,16 @@ class MkvManagScreen(Screen[None]):
                 yield ListAttachment(id="attachment")
         yield Footer()
 
-    @work(exclusive=True)
-    async def action_back_to_open(self) -> None:
-        """Return to the open screen and load a new MKV file."""
-        self.app.mkv = await self.app.push_screen_wait(OpenScreen())
+    def _update_title(self) -> None:
+        """Update the subtitle from the file path."""
+        self.sub_title = self.app.mkv.path.name
 
-        id = self.focused and self.focused.id
-        active = self.query_one(TabbedContent).active
-        await self.recompose()
-        if id is None:
-            self.query_one(TabbedContent).active = active
-            self.focus_next()
-        else:
-            self.query_one(f"#{id}").focus()
+    @on(ReloadRequested)
+    def _reload(self) -> None:
+        """Reload the screen's widgets."""
+        self._update_title()
+        for pane in self.query(TabPane):
+            pane.children[0].post_message(ReloadRequested())
 
     @work(exclusive=True)
     async def action_save(self) -> None:
