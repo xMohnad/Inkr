@@ -1,3 +1,27 @@
+HomeScreen {
+  align: center middle;
+
+  & > OptionList {
+    max-height: 90%;
+    width: 85%;
+  }
+
+  & > .recent--name,
+  & > .resume--name,
+  & > .open--label {
+    text-style: bold;
+  }
+
+  & > .recent--path {
+    color: $text-muted;
+  }
+
+  & > .resume--label {
+    color: $success;
+    text-style: bold;
+  }
+}
+
 TabbedContent {
   background: $surface;
 
@@ -158,14 +182,6 @@ DelayScreen {
       }
     }
   }
-}
-
-NoticeWidget {
-  height: 100%;
-  background: $background-lighten-1;
-  border: round $secondary;
-  content-align: center middle;
-  color: $primary-lighten-3;
 }
 
 FontsScreen {
