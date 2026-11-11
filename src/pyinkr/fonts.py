@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import tempfile
 from contextlib import suppress
@@ -96,8 +97,7 @@ class FontUsage(NamedTuple):
         return self.weight >= 700
 
 
-@dataclass(frozen=True, slots=True)
-class FontFile:
+class FontFile(NamedTuple):
     """One font face found on disk, with the info needed to match it to a `FontUsage`."""
 
     path: Path
@@ -220,19 +220,15 @@ def _extract_font_usages(styles: dict[str, FontUsage], dialogue_lines: list[tupl
     return usages
 
 
-def _load_font_objects(path: Path) -> list[TTFont]:
-    """Load `path` as a list of TTFont objects, or an empty list if unreadable/unsupported."""
-    try:
-        with path.open("rb") as f:
-            magic = f.read(4)
-
+def _load_font_objects(path: Path) -> Iterator[TTFont]:
+    """Load font objects from a file."""
+    with path.open("rb") as f:
+        magic = f.read(4)
+        f.seek(0)
         if magic == b"ttcf":
-            return TTCollection(path, lazy=True).fonts
-        if magic in (b"\x00\x01\x00\x00", b"OTTO"):
-            return [TTFont(path, lazy=True)]
-        return []
-    except Exception:
-        return []
+            yield from TTCollection(f, lazy=True).fonts
+        elif magic in (b"\x00\x01\x00\x00", b"OTTO"):
+            yield TTFont(f, lazy=True)
 
 
 def _read_font_faces(path: Path) -> list[FontFile]:
@@ -245,6 +241,9 @@ def _read_font_faces(path: Path) -> list[FontFile]:
                 # IDs: Family, Full name, Typographic family
                 if record.nameID in (1, 4, 16) and (n := record.toUnicode().strip()):
                     names.add(n.lower())
+
+        if not names:
+            continue
 
         weight, italic = 400, False
         if "OS/2" in tt:
@@ -279,9 +278,10 @@ def analyze_subtitle_fonts(track: MKVTrack) -> SubtitleFontInfo:
 def scan_font_faces(directory: Path) -> list[FontFile]:
     """Scan `directory` for font files, returning every face found."""
     faces: list[FontFile] = []
-    for candidate in directory.rglob("*"):
-        if candidate.is_file() and candidate.suffix.lower() in FONT_FILE_EXTENSIONS:
-            faces.extend(_read_font_faces(candidate))
+    for root, _, files in os.walk(directory):
+        for name in files:
+            if os.path.splitext(name)[1].lower() in FONT_FILE_EXTENSIONS:
+                faces.extend(_read_font_faces(Path(root, name)))
     return faces
 
 
