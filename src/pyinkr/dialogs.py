@@ -100,7 +100,7 @@ class DelayScreen(ModalScreen[int | None]):
             container.border_title = self._title
             with Horizontal(id="delay-row"):
                 yield Button("-", id="dec-btn", tooltip="Decrease (-, ↓)")
-                yield Input(value=self._format(self._delay_ms), id="delay-input", restrict=r"-?\d*\.?\d*")
+                yield Input(value=self._format(self._delay_ms), id="delay-input", type="number")
                 yield Button("+", id="inc-btn", tooltip="Increase (+, ↑)")
             with Horizontal(id="action-row"):
                 yield Button("Save", variant="primary", id="save-btn")
