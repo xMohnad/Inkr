@@ -199,7 +199,8 @@ class ListTrack(ChecklistView["MKVTrack"]):
         Binding("n", "edit('Track Name', 'track_name', 'Track name')", "Name"),
         Binding("l", "edit('Language', 'language', 'e.g. eng, jpn, ara')", "Language"),
         Binding("y", "edit_delay", "Delay"),
-        Binding("d", "toggle_default", "Default"),
+        Binding("d", "toggle_flag('default_track')", "Default"),
+        Binding("F", "toggle_flag('forced_track')", "Forced"),
         Binding("f", "check_fonts", "Fonts"),
         Binding("alt+up", "move_track(-1)", "Move Up", show=False),
         Binding("alt+down", "move_track(1)", "Move Down", show=False),
@@ -228,10 +229,10 @@ class ListTrack(ChecklistView["MKVTrack"]):
 
             self.add_row(track)
 
-    def action_toggle_default(self) -> None:
-        """Toggle the default flag of the highlighted track."""
+    def action_toggle_flag(self, flag: str) -> None:
+        """Toggle a flag of the highlighted track."""
         if (track := self.current) is not None:
-            track.default_track = not track.default_track
+            setattr(track, flag, not getattr(track, flag))
             self.refresh_row(track)
 
     @work(exclusive=True)
